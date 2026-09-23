@@ -1,0 +1,2 @@
+<?php
+// Giriş sayfası

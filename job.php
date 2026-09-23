@@ -1,0 +1,2 @@
+<?php
+// İş detay sayfası

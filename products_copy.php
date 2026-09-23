@@ -1,0 +1,2 @@
+<?php
+// Ürünler sayfası
