@@ -90,3 +90,11 @@ def pop_queued_job():
         )
         cur.close()
         return job_id
+
+def get_job(job_id):
+    with get_db() as conn:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM jobs WHERE id = %s", (job_id,))
+        row = cur.fetchone()
+        cur.close()
+        return row

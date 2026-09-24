@@ -55,6 +55,43 @@ def pop_redis_job(r):
         return None
 
 
+def _get_job_options(job_id):
+    """
+    Job'un method / output_bitdepth seçeneklerini DB'den oku.
+    Şema eski olabilir (sütunlar yok) → default döndür.
+    """
+    method = "softmax"
+    bitdepth = 8
+    try:
+        row = db.get_job(job_id)
+    except Exception as e:
+        print(f"[worker] get_job hatası, default kullanılacak: {e}")
+        return method, bitdepth
+
+    if not row:
+        return method, bitdepth
+
+    # method
+    try:
+        m = row.get("method")
+        if m in ("softmax", "dmap"):
+            method = m
+    except Exception:
+        pass
+
+    # bitdepth
+    try:
+        b = row.get("output_bitdepth")
+        if b is not None:
+            b = int(b)
+            if b in (8, 16):
+                bitdepth = b
+    except (TypeError, ValueError):
+        pass
+
+    return method, bitdepth
+
+
 def process_job(job_id):
     print(f"\n[worker] ══ Job #{job_id} işleniyor ══")
 
@@ -72,14 +109,28 @@ def process_job(job_id):
 
         print(f"[worker] {len(image_paths)} görüntü işlenecek")
 
+        # --- Method / Bitdepth DB'den oku ---
+        method, bitdepth = _get_job_options(job_id)
+        print(f"[worker] method={method}  bitdepth={bitdepth}")
+
         out_dir = OUTPUT_DIR / str(job_id)
         out_dir.mkdir(parents=True, exist_ok=True)
-        stacked = out_dir / f"stacked_{job_id}.jpg"
+
+        # 16-bit ise PNG, değilse JPG
+        if bitdepth == 16:
+            stacked = out_dir / f"stacked_{job_id}.png"
+        else:
+            stacked = out_dir / f"stacked_{job_id}.jpg"
 
         db.update_job(job_id, stage='stacking', progress=35)
 
         t0 = time.time()
-        ok = stack_images(image_paths, stacked)
+        ok = stack_images(
+            image_paths,
+            stacked,
+            method=method,
+            output_bitdepth=bitdepth,
+        )
         elapsed = round(time.time() - t0, 1)
 
         if not ok or not stacked.exists():
@@ -87,17 +138,27 @@ def process_job(job_id):
 
         print(f"[worker] Stacking tamamlandı ({elapsed}s)")
 
-        # ⚠️ DEĞİŞTİ: 'stacked' yerine 'master' (enum'da var)
         db.add_job_file(job_id, 'master', str(stacked), stacked.stat().st_size)
 
+        # --- Preview üret ---
         db.update_job(job_id, stage='preview', progress=85)
         prev_dir = PREVIEW_DIR / str(job_id)
         prev_dir.mkdir(parents=True, exist_ok=True)
         prev_path = prev_dir / f"preview_{job_id}.jpg"
 
+        # Master 16-bit PNG olabilir → PIL 16-bit PNG'yi okur ama
+        # preview her zaman 8-bit RGB JPEG olsun (tarayıcı uyumu)
         img = Image.open(stacked)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        elif img.mode == "L":
+            img = img.convert("RGB")
+        # 16-bit → 8-bit indirgeme
+        if img.mode == "I;16" or (hasattr(img, "mode") and "16" in str(img.mode)):
+            img = img.point(lambda v: v * (1.0 / 256)).convert("RGB")
+
         img.thumbnail((PREVIEW_MAX_SIZE, PREVIEW_MAX_SIZE), Image.LANCZOS)
-        img.convert('RGB').save(prev_path, 'JPEG', quality=88)
+        img.save(prev_path, 'JPEG', quality=88)
 
         db.add_job_file(job_id, 'preview', str(prev_path), prev_path.stat().st_size)
 
@@ -116,11 +177,10 @@ def process_job(job_id):
         try:
             db.update_job(job_id, status='failed', stage='error',
                           progress=0, error_msg=err[:500])
-
-            # ⚠️ DEĞİŞTİ: 64 karakter sınırı
             db.add_audit_log(job_id, ('failed: ' + err)[:60])
         except Exception as db_err:
             print(f"[worker] DB hata güncellemesi başarısız: {db_err}")
+
 
 def run_once():
     """Kuyruğu tamamen boşalt ve çık (cron için)."""
