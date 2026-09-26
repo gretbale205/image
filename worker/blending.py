@@ -21,7 +21,7 @@ class BlendConfig:
     min_texture: float = 0.01
 
     # Pyramid parametreleri
-    pyramid_levels: int = 7
+    pyramid_levels: int = 5
 
 
 # ---------------------------------------------------------------------------
