@@ -39,8 +39,34 @@ def _downscale(img: np.ndarray, max_dim: int) -> tuple[np.ndarray, float]:
 
 
 def _pick_reference(images: Sequence[np.ndarray]) -> int:
-    """Ortanca kare: komşu karelerle minimum hareket → daha iyi alignment."""
-    return len(images) // 2
+    """Ortanca kare yerine, komşularına en çok benzeyen kareyi seç.
+    Ghosting'i azaltır çünkü ref ile her hedef arası hareket minimum olur."""
+    if len(images) < 3:
+        return len(images) // 2
+
+    previews = [_to_gray_f32(_downscale(im, 800)[0]) for im in images]
+    n = len(previews)
+    mid = n // 2
+
+    # ortanca civarında ±2 komşuya NCC benzerliği ortalaması yüksek olanı seç
+    best_idx, best_score = mid, -1.0
+    for i in range(max(0, mid - 2), min(n, mid + 3)):
+        scores = []
+        for j in (i - 1, i + 1):
+            if 0 <= j < n:
+                a, b = previews[i], previews[j]
+                if a.shape != b.shape:
+                    b = cv2.resize(b, (a.shape[1], a.shape[0]))
+                res = cv2.matchTemplate(a, b, cv2.TM_CCOEFF_NORMED)
+                scores.append(float(res[0, 0]))
+        if scores:
+            s = sum(scores) / len(scores)
+            if s > best_score:
+                best_score, best_idx = s, i
+
+    logger.info("alignment reference_index=%d (neighbor-NCC, score=%.4f)",
+                best_idx, best_score)
+    return best_idx
 
 
 def _scale_translation_to_full(warp: np.ndarray, preview_scale: float) -> np.ndarray:
@@ -57,7 +83,7 @@ def align_stack(
     images: Sequence[np.ndarray],
     *,
     max_preview_dim: int = 1600,
-    motion: int = cv2.MOTION_AFFINE,   # ⚡ EUCLIDEAN → AFFINE
+    motion: int = cv2.MOTION_AFFINE,   # lens breathing correction
     max_iter: int = 500,
     eps: float = 1e-7,
     gauss_filter: int = 5,
@@ -67,7 +93,7 @@ def align_stack(
         raise ValueError("align_stack requires >= 2 images")
 
     ref_idx = _pick_reference(images)
-    logger.info("alignment reference_index=%d (median)", ref_idx)
+    logger.info("alignment reference_index=%d", ref_idx)
 
     previews, scales = [], []
     for img in images:
