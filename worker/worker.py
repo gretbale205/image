@@ -4,7 +4,14 @@ Focus Stacking Worker.
 Kullanım:
   python -m worker.worker              # sürekli çalış
   python -m worker.worker --once       # kuyruğu boşalt, çık (cron için)
+
+v3.2:
+  - PID bazlı log: storage/logs/worker_pid_<PID>.log
+  - Method başına ayrı ayar
+  - Progress callback → DB'ye aşama aşama yüzde
+  - İptal edilen iş 'cancelled' kalır, hata olsa bile 'failed'e çevrilmez
 """
+import os
 import signal
 import sys
 import time
@@ -25,9 +32,80 @@ from .focus_stack import stack_images
 RUNNING = True
 
 
+# ============================================================
+# METHOD AYARLARI
+# ============================================================
+METHOD_CONFIG = {
+    "softmax": {
+        "label": "Softmax (Hızlı)",
+        "preview_max_size": 1600,
+        "jpeg_quality": 95,
+        "align": True,
+    },
+    "dmap": {
+        "label": "DMap (Derinlik)",
+        "preview_max_size": 1600,
+        "jpeg_quality": 95,
+        "align": True,
+    },
+    "pyramid": {
+        "label": "Pyramid (En Kaliteli)",
+        "preview_max_size": 2000,
+        "jpeg_quality": 96,
+        "align": True,
+    },
+}
+
+
+# ============================================================
+# PID BAZLI LOG
+# ============================================================
+_LOG_FILE_PATH = None
+_LOG_HANDLE = None
+
+
+def _setup_worker_log():
+    global _LOG_FILE_PATH, _LOG_HANDLE
+
+    pid = os.getpid()
+    log_dir = Path("storage/logs")
+
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        log_dir = Path("/tmp")
+
+    _LOG_FILE_PATH = log_dir / f"worker_pid_{pid}.log"
+
+    try:
+        _LOG_HANDLE = open(_LOG_FILE_PATH, "a", buffering=1, encoding="utf-8")
+    except Exception:
+        _LOG_HANDLE = None
+
+    _log(f"[log] Bu worker'ın PID log dosyası: {_LOG_FILE_PATH}")
+    _log(f"[log] cwd={os.getcwd()}  pid={pid}")
+
+
+def _log(msg, level="INFO"):
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] [{level}] {msg}"
+
+    try:
+        print(line, flush=True)
+    except Exception:
+        pass
+
+    if _LOG_HANDLE is not None:
+        try:
+            _LOG_HANDLE.write(line + "\n")
+            _LOG_HANDLE.flush()
+        except Exception:
+            pass
+
+
 def _sig(sig, frame):
     global RUNNING
-    print("\n[worker] Kapatma sinyali alındı...")
+    _log("[worker] Kapatma sinyali alındı...", "WARN")
     RUNNING = False
 
 
@@ -35,6 +113,9 @@ signal.signal(signal.SIGINT, _sig)
 signal.signal(signal.SIGTERM, _sig)
 
 
+# ============================================================
+# Redis / DB
+# ============================================================
 def get_redis():
     try:
         r = redis.Redis(
@@ -55,31 +136,29 @@ def pop_redis_job(r):
         return None
 
 
+# ============================================================
+# Method / Bitdepth
+# ============================================================
 def _get_job_options(job_id):
-    """
-    Job'un method / output_bitdepth seçeneklerini DB'den oku.
-    Şema eski olabilir (sütunlar yok) → default döndür.
-    """
     method = "softmax"
     bitdepth = 8
+
     try:
         row = db.get_job(job_id)
     except Exception as e:
-        print(f"[worker] get_job hatası, default kullanılacak: {e}")
+        _log(f"get_job hatası, default kullanılacak: {e}", "WARN")
         return method, bitdepth
 
     if not row:
         return method, bitdepth
 
-    # method
     try:
         m = row.get("method")
-        if m in ("softmax", "dmap"):
+        if m in ("softmax", "dmap", "pyramid"):
             method = m
     except Exception:
         pass
 
-    # bitdepth
     try:
         b = row.get("output_bitdepth")
         if b is not None:
@@ -92,11 +171,35 @@ def _get_job_options(job_id):
     return method, bitdepth
 
 
+# ============================================================
+# İptal
+# ============================================================
+class JobCancelled(Exception):
+    """Kullanıcı işi iptal ettiğinde fırlatılır."""
+    pass
+
+
+def _check_cancelled(job_id, stage=""):
+    try:
+        status = db.get_job_status(job_id)
+    except Exception as e:
+        _log(f"cancel kontrolü başarısız (job={job_id}): {e}", "WARN")
+        return
+    if status == "cancelled":
+        raise JobCancelled(f"Job #{job_id} iptal edildi (stage={stage})")
+
+
+# ============================================================
+# PROCESS
+# ============================================================
 def process_job(job_id):
-    print(f"\n[worker] ══ Job #{job_id} işleniyor ══")
+    _log(f"══ Job #{job_id} işleniyor ══")
 
     try:
-        db.update_job(job_id, status='processing', stage='loading', progress=15)
+        # Başlarken zaten iptal edilmiş mi?
+        _check_cancelled(job_id, stage="start")
+
+        db.update_job(job_id, status='processing', stage='loading', progress=5)
 
         files = db.get_job_files(job_id, role='source')
         if len(files) < 2:
@@ -107,22 +210,41 @@ def process_job(job_id):
         if missing:
             raise Exception(f"Eksik dosyalar: {missing}")
 
-        print(f"[worker] {len(image_paths)} görüntü işlenecek")
+        _log(f"{len(image_paths)} görüntü işlenecek")
 
-        # --- Method / Bitdepth DB'den oku ---
         method, bitdepth = _get_job_options(job_id)
-        print(f"[worker] method={method}  bitdepth={bitdepth}")
+        cfg = METHOD_CONFIG.get(method, METHOD_CONFIG["softmax"])
+        _log(f"method={method} ({cfg['label']})  bitdepth={bitdepth}")
+
+        _check_cancelled(job_id, stage="after_options")
 
         out_dir = OUTPUT_DIR / str(job_id)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # 16-bit ise PNG, değilse JPG
         if bitdepth == 16:
             stacked = out_dir / f"stacked_{job_id}.png"
         else:
             stacked = out_dir / f"stacked_{job_id}.jpg"
 
-        db.update_job(job_id, stage='stacking', progress=35)
+        db.update_job(job_id, stage='stacking', progress=10)
+
+        _log("▶ stack_images başlıyor")
+
+        def _progress(pct, stage_name):
+            try:
+                db.update_job(job_id, progress=int(pct), stage=str(stage_name)[:40])
+            except Exception as e:
+                _log(f"progress güncelleme hatası: {e}", "WARN")
+
+        def _cancel_check():
+            try:
+                status = db.get_job_status(job_id)
+            except Exception:
+                return False
+            return status == "cancelled"
+
+        def _stack_log(msg):
+            _log(str(msg))
 
         t0 = time.time()
         ok = stack_images(
@@ -130,35 +252,46 @@ def process_job(job_id):
             stacked,
             method=method,
             output_bitdepth=bitdepth,
+            align=cfg.get("align", True),
+            log_cb=_stack_log,
+            progress_cb=_progress,
+            cancel_cb=_cancel_check,
         )
         elapsed = round(time.time() - t0, 1)
 
-        if not ok or not stacked.exists():
+        if not ok:
+            # İptalden mi döndü, gerçek hata mı?
+            if db.is_job_cancelled(job_id):
+                raise JobCancelled(f"Job #{job_id} stacking sırasında iptal edildi")
             raise Exception("Stacking başarısız")
 
-        print(f"[worker] Stacking tamamlandı ({elapsed}s)")
+        if not stacked.exists():
+            raise Exception("Master dosya oluşmadı")
+
+        _log(f"✔ stack_images tamamlandı ({elapsed}s)")
+
+        _check_cancelled(job_id, stage="after_stacking")
 
         db.add_job_file(job_id, 'master', str(stacked), stacked.stat().st_size)
 
-        # --- Preview üret ---
-        db.update_job(job_id, stage='preview', progress=85)
+        # --- Preview ---
+        db.update_job(job_id, stage='preview', progress=92)
         prev_dir = PREVIEW_DIR / str(job_id)
         prev_dir.mkdir(parents=True, exist_ok=True)
         prev_path = prev_dir / f"preview_{job_id}.jpg"
 
-        # Master 16-bit PNG olabilir → PIL 16-bit PNG'yi okur ama
-        # preview her zaman 8-bit RGB JPEG olsun (tarayıcı uyumu)
         img = Image.open(stacked)
         if img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
         elif img.mode == "L":
             img = img.convert("RGB")
-        # 16-bit → 8-bit indirgeme
-        if img.mode == "I;16" or (hasattr(img, "mode") and "16" in str(img.mode)):
+
+        if img.mode == "I;16" or "16" in str(img.mode):
             img = img.point(lambda v: v * (1.0 / 256)).convert("RGB")
 
-        img.thumbnail((PREVIEW_MAX_SIZE, PREVIEW_MAX_SIZE), Image.LANCZOS)
-        img.save(prev_path, 'JPEG', quality=88)
+        max_size = cfg.get("preview_max_size", PREVIEW_MAX_SIZE)
+        img.thumbnail((max_size, max_size), Image.LANCZOS)
+        img.save(prev_path, 'JPEG', quality=cfg.get("jpeg_quality", 88))
 
         db.add_job_file(job_id, 'preview', str(prev_path), prev_path.stat().st_size)
 
@@ -168,27 +301,45 @@ def process_job(job_id):
         )
         db.add_audit_log(job_id, 'stacking_completed')
 
-        print(f"[worker] ✓ Job #{job_id} tamamlandı")
+        _log(f"✓ Job #{job_id} tamamlandı")
+
+    except JobCancelled as e:
+        # Kullanıcı iptal etti → status 'cancelled' KALSIN, ezme!
+        _log(f"✗ Job #{job_id} İPTAL: {e}", "WARN")
+        try:
+            db.add_audit_log(job_id, 'cancelled_during_processing')
+        except Exception:
+            pass
 
     except Exception as e:
         err = f"{type(e).__name__}: {e}"
-        print(f"[worker] ✗ Job #{job_id} HATA: {err}")
-        traceback.print_exc()
+        _log(f"✗ Job #{job_id} HATA: {err}", "ERROR")
+        _log(traceback.format_exc(), "ERROR")
+
+        # ⚠️ KRİTİK: kullanıcı iptal ettiyse 'failed' yazma!
+        try:
+            if db.is_job_cancelled(job_id):
+                _log(f"Job #{job_id} zaten 'cancelled' — 'failed' yazılmadı", "WARN")
+                return
+        except Exception:
+            pass
+
         try:
             db.update_job(job_id, status='failed', stage='error',
                           progress=0, error_msg=err[:500])
             db.add_audit_log(job_id, ('failed: ' + err)[:60])
         except Exception as db_err:
-            print(f"[worker] DB hata güncellemesi başarısız: {db_err}")
+            _log(f"DB hata güncellemesi başarısız: {db_err}", "ERROR")
 
 
+# ============================================================
+# MODLAR
+# ============================================================
 def run_once():
-    """Kuyruğu tamamen boşalt ve çık (cron için)."""
-    print("[worker] --once modu: kuyruk boşaltılıyor")
+    _log("--once modu: kuyruk boşaltılıyor")
 
     r = get_redis()
 
-    # Önce Redis
     if r:
         while RUNNING:
             job_id = pop_redis_job(r)
@@ -196,27 +347,26 @@ def run_once():
                 break
             process_job(job_id)
 
-    # Sonra DB
     while RUNNING:
         try:
             job_id = db.pop_queued_job()
         except Exception as e:
-            print(f"[worker] DB hata: {e}")
+            _log(f"DB hata: {e}", "ERROR")
             break
         if job_id is None:
             break
         process_job(job_id)
 
-    print("[worker] --once modu bitti")
+    _log("--once modu bitti")
 
 
 def run_forever():
-    print("[worker] Sürekli mod")
+    _log("Sürekli mod")
     r = get_redis()
     if r:
-        print(f"[worker] Redis bağlı: {REDIS_HOST}:{REDIS_PORT}")
+        _log(f"Redis bağlı: {REDIS_HOST}:{REDIS_PORT}")
     else:
-        print("[worker] Redis yok, DB polling")
+        _log("Redis yok, DB polling")
 
     while RUNNING:
         job_id = None
@@ -226,7 +376,7 @@ def run_forever():
             try:
                 job_id = db.pop_queued_job()
             except Exception as e:
-                print(f"[worker] DB polling hatası: {e}")
+                _log(f"DB polling hatası: {e}", "ERROR")
 
         if job_id:
             process_job(job_id)
@@ -236,11 +386,20 @@ def run_forever():
                     break
                 time.sleep(0.5)
 
-    print("[worker] Çıkış")
+    _log("Çıkış")
 
 
+# ============================================================
+# MAIN
+# ============================================================
 if __name__ == "__main__":
-    if "--once" in sys.argv:
-        run_once()
-    else:
-        run_forever()
+    _setup_worker_log()
+    try:
+        if "--once" in sys.argv:
+            run_once()
+        else:
+            run_forever()
+    except Exception as e:
+        _log(f"FATAL: {type(e).__name__}: {e}", "ERROR")
+        _log(traceback.format_exc(), "ERROR")
+        raise

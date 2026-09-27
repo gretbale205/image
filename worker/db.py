@@ -91,6 +91,7 @@ def pop_queued_job():
         cur.close()
         return job_id
 
+
 def get_job(job_id):
     with get_db() as conn:
         cur = conn.cursor(dictionary=True)
@@ -98,3 +99,21 @@ def get_job(job_id):
         row = cur.fetchone()
         cur.close()
         return row
+
+
+def get_job_status(job_id):
+    """Job'un mevcut status değerini döndür (yoksa None)."""
+    try:
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT status FROM jobs WHERE id = %s", (job_id,))
+            row = cur.fetchone()
+            cur.close()
+            return row[0] if row else None
+    except Exception:
+        return None
+
+
+def is_job_cancelled(job_id):
+    """Job kullanıcı tarafından iptal edilmişse True."""
+    return get_job_status(job_id) == 'cancelled'
