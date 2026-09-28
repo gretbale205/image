@@ -1,0 +1,19 @@
+[2026-09-27 18:49:32] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_656159.log
+[2026-09-27 18:49:32] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=656159
+[2026-09-27 18:49:32] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-27 18:49:32] [INFO] ══ Job #31 işleniyor ══
+[2026-09-27 18:49:32] [INFO] 9 görüntü işlenecek
+[2026-09-27 18:49:32] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-27 18:49:33] [INFO] ▶ stack_images başlıyor
+[stack] ═══ BAŞLA: N=9  method=pyramid  bitdepth=8  align=True
+[2026-09-27 18:49:33] [INFO] [stack] ═══ BAŞLA: N=9  method=pyramid  bitdepth=8  align=True
+[stack] 1) yükleme: 2.13s  ilk=(4608, 3456, 3)  dtype=uint8  boyutlar=[(4608, 3456)]
+[2026-09-27 18:49:35] [INFO] [stack] 1) yükleme: 2.13s  ilk=(4608, 3456, 3)  dtype=uint8  boyutlar=[(4608, 3456)]
+[stack] 2) resize: 0.00s  hedef=3456x4608  N=9
+[2026-09-27 18:49:35] [INFO] [stack] 2) resize: 0.00s  hedef=3456x4608  N=9
+[stack] 3) preprocess: 11.16s
+[2026-09-27 18:49:46] [INFO] [stack] 3) preprocess: 11.16s
+[stack] 4) alignment: 2.23s  ref=4  mean=0.963  min=0.861
+[2026-09-27 18:49:48] [INFO] [stack] 4) alignment: 2.23s  ref=4  mean=0.963  min=0.861
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(4608, 3456, 3)  dtype=uint8
+[2026-09-27 18:49:49] [INFO] [stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(4608, 3456, 3)  dtype=uint8

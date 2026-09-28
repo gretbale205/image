@@ -1,11 +1,13 @@
 <?php
 // ============================================================
-// FocusStack — v3.1
+// FocusStack — v3.2
 // - Desktop: 2 sütun (kaydırmasız)
 // - Mobile: tek sütun
 // - Method / Bitdepth seçimi
 // - Lightbox + mercek + kamera
 // - ⭐ v3.1: 502 fix — worker asenkron çalışır
+// - ⭐ v3.2: tekil / çoklu / tüm iş iptali + cancelled badge
+//          + retry -> worker otomatik + upload log
 // ============================================================
 @set_time_limit(600);
 @ini_set('memory_limit', '2G');
@@ -63,6 +65,67 @@ function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function flash($m, $t='info') { $_SESSION['flash'][] = ['m'=>$m,'t'=>$t]; }
 function flashes() { $f = $_SESSION['flash'] ?? []; unset($_SESSION['flash']); return $f; }
 
+
+
+
+
+/**
+ * jobs.status ENUM'ında 'cancelled' var mı kontrol eder.
+ * Yoksa ALTER TABLE ile eklemeyi dener.
+ * Başarısızsa false döner (fallback: failed + özel mesaj).
+ */
+function ensure_cancelled_status(): bool
+{
+    static $ok = null;
+    if ($ok !== null) return $ok;
+
+    try {
+        $pdo = db();
+
+        $row = $pdo->query("SHOW COLUMNS FROM jobs LIKE 'status'")
+                   ->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) { $ok = false; return false; }
+
+        $type = (string)($row['Type'] ?? '');
+
+        if (stripos($type, "'cancelled'") !== false) {
+            $ok = true;
+            return true;
+        }
+
+        if (preg_match('/^enum\((.*)\)$/i', $type, $m)) {
+            $newType = "enum(" . $m[1] . ",'cancelled')";
+            $pdo->exec(
+                "ALTER TABLE jobs MODIFY COLUMN status $newType DEFAULT 'queued'"
+            );
+            @file_put_contents(
+                LOG_FILE,
+                '[' . date('Y-m-d H:i:s') . '] ' .
+                "jobs.status ENUM'a 'cancelled' eklendi\n",
+                FILE_APPEND
+            );
+            $ok = true;
+            return true;
+        }
+
+        $ok = true;
+        return true;
+
+    } catch (Throwable $e) {
+        @file_put_contents(
+            LOG_FILE,
+            '[' . date('Y-m-d H:i:s') . '] ' .
+            'ensure_cancelled_status HATA: ' . $e->getMessage() . "\n",
+            FILE_APPEND
+        );
+        $ok = false;
+        return false;
+    }
+}
+
+
+
 /**
  * ============================================================
  * ASENKRON WORKER BAŞLATICI
@@ -70,13 +133,12 @@ function flashes() { $f = $_SESSION['flash'] ?? []; unset($_SESSION['flash']); r
  *
  * Özellikler:
  *
- * - Python stdout/stderr unbuffered
+ * - Python stdout/stderr unbuffered (PYTHONUNBUFFERED + -u)
  * - Worker log dosyası
- * - PID takibi
+ * - PID takibi + ölü/stale PID temizleme
  * - Aynı anda birden fazla worker engeli
- * - Ölü/stale PID temizleme
- * - Upload tarafından çağrıldığında sonucu loglama
  * - PHP worker'ın bitmesini beklemez
+ * - exec_exit / PID sonucu global loga yazılır
  *
  * ============================================================
  */
@@ -87,51 +149,213 @@ function run_worker(): string
      * Python kontrolü
      * --------------------------------------------------------
      */
-
     if (!is_file(PYTHON_BIN)) {
-
-        $msg =
-            "HATA: Python bulunamadı: " .
-            PYTHON_BIN;
-
+        $msg = "HATA: Python bulunamadı: " . PYTHON_BIN;
         @file_put_contents(
             LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] ' .
-            $msg .
-            "\n",
+            '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n",
             FILE_APPEND
         );
-
         return $msg;
     }
 
     if (!is_executable(PYTHON_BIN)) {
+        $msg = "HATA: Python executable değil: " . PYTHON_BIN;
+        @file_put_contents(
+            LOG_FILE,
+            '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n",
+            FILE_APPEND
+        );
+        return $msg;
+    }
 
+    /*
+     * --------------------------------------------------------
+     * Klasörler
+     * --------------------------------------------------------
+     */
+    $logDir = STORAGE_ROOT . '/logs';
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0755, true);
+    }
+    if (!is_dir($logDir)) {
+        $msg = "HATA: Worker log klasörü oluşturulamadı: " . $logDir;
+        @file_put_contents(
+            LOG_FILE,
+            '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n",
+            FILE_APPEND
+        );
+        return $msg;
+    }
+
+    /*
+     * --------------------------------------------------------
+     * Worker PID / LOCK
+     * --------------------------------------------------------
+     */
+    $pidFile = STORAGE_ROOT . '/worker.pid';
+
+    if (is_file($pidFile)) {
+        $oldPid = (int)trim((string)@file_get_contents($pidFile));
+
+        if ($oldPid > 0 && is_dir('/proc/' . $oldPid)) {
+            $msg = "⏳ Worker zaten çalışıyor. PID=" . $oldPid;
+            @file_put_contents(LOG_FILE, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
+            return $msg;
+        }
+
+        // Eski worker ölmüş → takılı 'processing' işleri kurtar
+        @unlink($pidFile);
+
+        try {
+            $stuck = db()->prepare("
+                UPDATE jobs
+                SET status='queued',
+                    stage='uploaded',
+                    progress=0,
+                    error_msg='Worker ölmüş, yeniden kuyruğa alındı'
+                WHERE status='processing'
+            ");
+            $stuck->execute();
+            $recovered = $stuck->rowCount();
+            if ($recovered > 0) {
+                @file_put_contents(
+                    LOG_FILE,
+                    '[' . date('Y-m-d H:i:s') . "] {$recovered} adet takılı iş kurtarıldı\n",
+                    FILE_APPEND
+                );
+            }
+        } catch (Throwable $e) {
+            @file_put_contents(
+                LOG_FILE,
+                '[' . date('Y-m-d H:i:s') . '] stuck-recovery HATA: ' . $e->getMessage() . "\n",
+                FILE_APPEND
+            );
+        }
+    }
+
+    /*
+     * --------------------------------------------------------
+     * Log dosyası
+     * --------------------------------------------------------
+     */
+    $logFile = $logDir . '/worker_' .
+        date('Ymd_His') . '_' .
+        bin2hex(random_bytes(3)) . '.log';
+
+    /*
+     * --------------------------------------------------------
+     * Environment
+     * --------------------------------------------------------
+     */
+    $home = getenv('HOME');
+    if (!$home) {
+        $home = '/home/sularkuyumculuk';
+    }
+
+    /*
+     * --------------------------------------------------------
+     * Python command
+     *
+     * PYTHONUNBUFFERED=1 + -u → print çıktıları log dosyasına
+     * hemen gider (buffer'a takılıp OOM'da kaybolmaz).
+     * --------------------------------------------------------
+     */
+    $cmd = sprintf(
+        'cd %s && ' .
+        'HOME=%s ' .
+        'PATH=/usr/local/bin:/usr/bin:/bin ' .
+        'PYTHONUNBUFFERED=1 ' .
+        'nohup %s -u -m worker.worker --once ' .
+        '> %s 2>&1 & ' .
+        'echo $! > %s',
+        escapeshellarg(__DIR__),
+        escapeshellarg($home),
+        escapeshellarg(PYTHON_BIN),
+        escapeshellarg($logFile),
+        escapeshellarg($pidFile)
+    );
+
+    /*
+     * --------------------------------------------------------
+     * Worker başlat
+     * --------------------------------------------------------
+     */
+    $execOutput = [];
+    $execCode = 0;
+    @exec($cmd, $execOutput, $execCode);
+
+    /*
+     * --------------------------------------------------------
+     * PID oku (kısa gecikmeli retry)
+     * --------------------------------------------------------
+     */
+    $pid = '';
+    for ($i = 0; $i < 10; $i++) {
+        if (is_file($pidFile)) {
+            $pid = trim((string)@file_get_contents($pidFile));
+            if ($pid !== '') break;
+        }
+        usleep(100000);
+    }
+
+    /*
+     * --------------------------------------------------------
+     * Başlangıç logu (global)
+     * --------------------------------------------------------
+     */
+    $stamp =
+        '[' . date('Y-m-d H:i:s') . '] ' .
+        'Worker arka planda başlatıldı: ' .
+        basename($logFile) .
+        ' PID=' . ($pid !== '' ? $pid : 'unknown') .
+        ' exec_exit=' . $execCode . "\n";
+
+    @file_put_contents(LOG_FILE, $stamp, FILE_APPEND);
+
+    /*
+     * Worker logunun başına launcher bilgisi.
+     */
+    @file_put_contents(
+        $logFile,
+        '[launcher] ' . date('Y-m-d H:i:s') . ' Worker başlatıldı' . PHP_EOL .
+        '[launcher] PID=' . ($pid !== '' ? $pid : 'unknown') . PHP_EOL .
+        '[launcher] Python=' . PYTHON_BIN . PHP_EOL .
+        '[launcher] Project=' . __DIR__ . PHP_EOL .
+        '[launcher] exec_exit=' . $execCode . PHP_EOL .
+        '[launcher] command=' . $cmd . PHP_EOL .
+        PHP_EOL,
+        FILE_APPEND
+    );
+
+    /*
+     * Başlangıç kontrolü
+     */
+    if ($pid === '' || (int)$pid <= 0) {
         $msg =
-            "HATA: Python executable değil: " .
-            PYTHON_BIN;
+            "⚠ Worker başlatma sonucu belirsiz.\n" .
+            "PID alınamadı.\n" .
+            "Log: " . basename($logFile);
 
         @file_put_contents(
             LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] ' .
-            $msg .
-            "\n",
+            '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n",
             FILE_APPEND
         );
 
         return $msg;
     }
 
-
-
-
-    
+    return
+        "✅ Worker arka planda başlatıldı.\n" .
+        "PID: " . $pid . "\n" .
+        "Log: " . basename($logFile);
+}
 
 /**
- * Tek veya çoklu job iptali.
- *
- * @param array<int> $jobIds
- * @return string
+ * Tekli / çoklu job iptali.
+ * ENUM'da 'cancelled' yoksa otomatik eklemeye çalışır,
+ * başarısızsa 'failed' + özel error_msg fallback'i kullanır.
  */
 function cancel_jobs(array $jobIds): string
 {
@@ -147,23 +371,29 @@ function cancel_jobs(array $jobIds): string
     }
 
     $pdo = db();
-
     $placeholders = implode(',', array_fill(0, count($jobIds), '?'));
 
-    /*
-     * Sadece tamamlanmamış işleri iptal ediyoruz.
-     *
-     * done / failed / cancelled olan işler değiştirilmez.
-     */
-    $sql = "
-        UPDATE jobs
-        SET
-            status = 'cancelled',
-            progress = 0,
-            error_msg = 'Kullanıcı tarafından durduruldu'
-        WHERE id IN ($placeholders)
-          AND status IN ('queued', 'processing')
-    ";
+    $hasCancelled = ensure_cancelled_status();
+
+    if ($hasCancelled) {
+        $sql = "
+            UPDATE jobs
+            SET
+                status = 'cancelled',
+                error_msg = 'Kullanıcı tarafından durduruldu'
+            WHERE id IN ($placeholders)
+              AND status IN ('queued', 'processing')
+        ";
+    } else {
+        $sql = "
+            UPDATE jobs
+            SET
+                status = 'failed',
+                error_msg = 'Kullanıcı tarafından durduruldu'
+            WHERE id IN ($placeholders)
+              AND status IN ('queued', 'processing')
+        ";
+    }
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($jobIds);
@@ -171,370 +401,81 @@ function cancel_jobs(array $jobIds): string
     $count = $stmt->rowCount();
 
     $msg =
-        "🛑 $count iş durduruldu." .
+        "🛑 {$count} iş durduruldu." .
         "\nSeçilen: " . count($jobIds);
 
     @file_put_contents(
         LOG_FILE,
-        '[' . date('Y-m-d H:i:s') . '] cancel_jobs: ' .
-        $msg .
+        '[' . date('Y-m-d H:i:s') . '] cancel_jobs: ' . $msg .
         ' IDs=' . implode(',', $jobIds) .
-        "\n",
+        ' hasCancelled=' . ($hasCancelled ? '1' : '0') . "\n",
         FILE_APPEND
     );
+
+    foreach ($jobIds as $jobId) {
+        try {
+            db()->prepare(
+                "INSERT INTO audit_log (job_id, user_ref, action)
+                 VALUES (?, 'web', 'job_cancelled')"
+            )->execute([$jobId]);
+        } catch (Throwable $e) {
+            try {
+                db()->prepare(
+                    "INSERT INTO audit_log (job_id, action)
+                     VALUES (?, 'job_cancelled')"
+                )->execute([$jobId]);
+            } catch (Throwable $ignored) {}
+        }
+    }
 
     return $msg;
 }
 
+/**
+ * ============================================================
+ * TÜM AKTİF İŞLERİ İPTAL ET
+ * ============================================================
+ */
+function cancel_all_jobs(): string
+{
+    $pdo = db();
 
+    $ids = $pdo->query(
+        "SELECT id
+         FROM jobs
+         WHERE status IN ('queued', 'processing')
+         ORDER BY id"
+    )->fetchAll(PDO::FETCH_COLUMN);
 
-    /*
-     * --------------------------------------------------------
-     * Klasörler
-     * --------------------------------------------------------
-     */
-
-    $logDir =
-        STORAGE_ROOT . '/logs';
-
-    if (!is_dir($logDir)) {
-        @mkdir(
-            $logDir,
-            0755,
-            true
-        );
+    if (!$ids) {
+        return 'Aktif veya kuyrukta iş yok.';
     }
 
-    if (!is_dir($logDir)) {
-
-        $msg =
-            "HATA: Worker log klasörü oluşturulamadı: " .
-            $logDir;
-
-        @file_put_contents(
-            LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] ' .
-            $msg .
-            "\n",
-            FILE_APPEND
-        );
-
-        return $msg;
-    }
-
-
-    /*
-     * --------------------------------------------------------
-     * Worker PID / LOCK
-     * --------------------------------------------------------
-     */
-
-    $pidFile =
-        STORAGE_ROOT . '/worker.pid';
-
-
-    /*
-     * Eski PID kontrolü
-     */
-    if (is_file($pidFile)) {
-
-        $oldPid =
-            (int)trim(
-                (string)@file_get_contents(
-                    $pidFile
-                )
-            );
-
-        if ($oldPid > 0) {
-
-            /*
-             * /proc/$pid varsa process hâlâ yaşıyor.
-             */
-            if (
-                is_dir(
-                    '/proc/' . $oldPid
-                )
-            ) {
-
-                $msg =
-                    "⏳ Worker zaten çalışıyor. " .
-                    "PID=" .
-                    $oldPid;
-
-                @file_put_contents(
-                    LOG_FILE,
-                    '[' .
-                    date('Y-m-d H:i:s') .
-                    '] ' .
-                    $msg .
-                    "\n",
-                    FILE_APPEND
-                );
-
-                return $msg;
-            }
-        }
-
-        /*
-         * Process artık yok.
-         * Eski/stale PID temizlenir.
-         */
-        @unlink(
-            $pidFile
-        );
-    }
-
-
-    /*
-     * --------------------------------------------------------
-     * Log dosyası
-     * --------------------------------------------------------
-     */
-
-    $logFile =
-        $logDir .
-        '/worker_' .
-        date('Ymd_His') .
-        '_' .
-        bin2hex(
-            random_bytes(3)
-        ) .
-        '.log';
-
-
-    /*
-     * --------------------------------------------------------
-     * Environment
-     * --------------------------------------------------------
-     */
-
-    $home =
-        getenv('HOME');
-
-    if (!$home) {
-        $home =
-            '/home/sularkuyumculuk';
-    }
-
-
-    /*
-     * --------------------------------------------------------
-     * Python command
-     * --------------------------------------------------------
-     *
-     * PYTHONUNBUFFERED=1 özellikle önemli.
-     *
-     * Böylece:
-     *
-     * print(...)
-     *
-     * çıktıları log dosyasına hemen gider.
-     * --------------------------------------------------------
-     */
-
-    $cmd = sprintf(
-        'cd %s && ' .
-        'HOME=%s ' .
-        'PATH=/usr/local/bin:/usr/bin:/bin ' .
-        'PYTHONUNBUFFERED=1 ' .
-        'nohup %s -u -m worker.worker --once ' .
-        '> %s 2>&1 & ' .
-        'echo $! > %s',
-        escapeshellarg(
-            __DIR__
-        ),
-        escapeshellarg(
-            $home
-        ),
-        escapeshellarg(
-            PYTHON_BIN
-        ),
-        escapeshellarg(
-            $logFile
-        ),
-        escapeshellarg(
-            $pidFile
-        )
-    );
-
-
-    /*
-     * --------------------------------------------------------
-     * Worker başlat
-     * --------------------------------------------------------
-     *
-     * -u:
-     * Python stdout/stderr unbuffered.
-     *
-     * PYTHONUNBUFFERED=1:
-     * Ek güvence.
-     *
-     * nohup + &:
-     * PHP request worker'ı beklemez.
-     * --------------------------------------------------------
-     */
-
-    $execOutput = [];
-
-    $execCode = 0;
-
-    @exec(
-        $cmd,
-        $execOutput,
-        $execCode
-    );
-
-
-    /*
-     * --------------------------------------------------------
-     * PID oku
-     * --------------------------------------------------------
-     */
-
-    $pid = '';
-
-    /*
-     * echo $! dosyaya yazıldıktan sonra
-     * çok kısa bir gecikme gerekebilir.
-     */
-    for (
-        $i = 0;
-        $i < 10;
-        $i++
-    ) {
-
-        if (is_file($pidFile)) {
-
-            $pid =
-                trim(
-                    (string)@file_get_contents(
-                        $pidFile
-                    )
-                );
-
-            if ($pid !== '') {
-                break;
-            }
-        }
-
-        usleep(100000);
-    }
-
-
-    /*
-     * --------------------------------------------------------
-     * Başlangıç logu
-     * --------------------------------------------------------
-     */
-
-    $stamp =
-        '[' .
-        date('Y-m-d H:i:s') .
-        '] ' .
-        'Worker arka planda başlatıldı: ' .
-        basename($logFile) .
-        ' PID=' .
-        (
-            $pid !== ''
-                ? $pid
-                : 'unknown'
-        ) .
-        ' exec_exit=' .
-        $execCode .
-        "\n";
-
-    @file_put_contents(
-        LOG_FILE,
-        $stamp,
-        FILE_APPEND
-    );
-
-
-    /*
-     * Worker logunun başına launcher bilgisi.
-     */
-    @file_put_contents(
-        $logFile,
-        '[launcher] ' .
-        date('Y-m-d H:i:s') .
-        ' Worker başlatıldı' .
-        PHP_EOL .
-        '[launcher] PID=' .
-        (
-            $pid !== ''
-                ? $pid
-                : 'unknown'
-        ) .
-        PHP_EOL .
-        '[launcher] Python=' .
-        PYTHON_BIN .
-        PHP_EOL .
-        '[launcher] Project=' .
-        __DIR__ .
-        PHP_EOL .
-        '[launcher] exec_exit=' .
-        $execCode .
-        PHP_EOL .
-        '[launcher] command=' .
-        $cmd .
-        PHP_EOL .
-        PHP_EOL,
-        FILE_APPEND
-    );
-
-
-    /*
-     * --------------------------------------------------------
-     * Başlangıç kontrolü
-     * --------------------------------------------------------
-     */
-
-    if (
-        $pid === '' ||
-        (int)$pid <= 0
-    ) {
-
-        $msg =
-            "⚠ Worker başlatma sonucu belirsiz.\n" .
-            "PID alınamadı.\n" .
-            "Log: " .
-            basename($logFile);
-
-        @file_put_contents(
-            LOG_FILE,
-            '[' .
-            date('Y-m-d H:i:s') .
-            '] ' .
-            $msg .
-            "\n",
-            FILE_APPEND
-        );
-
-        return $msg;
-    }
-
-
-    /*
-     * --------------------------------------------------------
-     * Sonuç
-     * --------------------------------------------------------
-     */
-
-    return
-        "✅ Worker arka planda başlatıldı.\n" .
-        "PID: " .
-        $pid .
-        "\n" .
-        "Log: " .
-        basename($logFile);
+    return cancel_jobs(array_map('intval', $ids));
 }
 
-function badge($st) {
-    $cls = ['queued'=>'b-queued','processing'=>'b-proc','preview_ready'=>'b-ok',
-            'done'=>'b-ok','approved'=>'b-app','rejected'=>'b-rej','failed'=>'b-fail'];
+// ---------- BADGE ----------
+function badge($st, $errorMsg = '') {
+    if ($st === 'failed' && stripos((string)$errorMsg, 'Kullanıcı tarafından') !== false) {
+        return 'b-cancelled';
+    }
+    $cls = [
+        'queued'        => 'b-queued',
+        'processing'    => 'b-proc',
+        'preview_ready' => 'b-ok',
+        'done'          => 'b-ok',
+        'approved'      => 'b-app',
+        'rejected'      => 'b-rej',
+        'failed'        => 'b-fail',
+        'cancelled'     => 'b-cancelled',
+    ];
     return $cls[$st] ?? 'b-queued';
 }
-function badge_label($st) {
+
+function badge_label($st, $errorMsg = '') {
+    if ($st === 'failed' && stripos((string)$errorMsg, 'Kullanıcı tarafından') !== false) {
+        return 'Durduruldu';
+    }
     return [
         'queued'        => 'Kuyrukta',
         'processing'    => 'İşleniyor',
@@ -543,8 +484,10 @@ function badge_label($st) {
         'approved'      => 'Onaylandı',
         'rejected'      => 'Reddedildi',
         'failed'        => 'Hata',
+        'cancelled'     => 'Durduruldu',
     ][$st] ?? $st;
 }
+
 function home_url(): string {
     $p = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
     if ($p === false || $p === '' || $p === '?') $p = './';
@@ -645,7 +588,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Throwable $t) {}
             $pdo->commit();
 
-            @run_worker();
+            /*
+             * ----------------------------------------------------
+             * Upload sonrası worker başlat + sonucu logla
+             * ----------------------------------------------------
+             */
+            $workerMsg = run_worker();
+            $_SESSION['worker_output'] = $workerMsg;
+
+            @file_put_contents(
+                LOG_FILE,
+                '[' . date('Y-m-d H:i:s') . '] upload->worker: ' .
+                $workerMsg . "\n",
+                FILE_APPEND
+            );
 
             if ($isAjax) {
                 header('Content-Type: application/json');
@@ -667,88 +623,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // ============ MANUEL WORKER ============
     if ($action === 'run_worker') {
         $out = run_worker();
         $_SESSION['worker_output'] = $out;
-        flash('Worker arka planda başlatıldı', 'info');
+
+        @file_put_contents(
+            LOG_FILE,
+            '[' . date('Y-m-d H:i:s') . '] manual->worker: ' .
+            $out . "\n",
+            FILE_APPEND
+        );
+
+        flash('Worker başlatma işlemi tamamlandı', 'info');
+
         $back = $_POST['back'] ?? $HOME_URL;
         header('Location: ' . $back); exit;
     }
 
+    // ============ TEKLİ İPTAL ============
     if ($action === 'cancel_job') {
         $jid = (int)($_POST['job_id'] ?? 0);
-    
+
         try {
             if ($jid <= 0) {
                 throw new Exception('Geçersiz iş numarası.');
             }
-    
+
             $msg = cancel_jobs([$jid]);
-    
+
             $_SESSION['worker_output'] = $msg;
-    
             flash($msg, 'info');
-    
+
         } catch (Throwable $e) {
-    
             @file_put_contents(
                 LOG_FILE,
                 '[' . date('Y-m-d H:i:s') . '] cancel_job HATA: ' .
-                $e->getMessage() .
-                "\n",
+                $e->getMessage() . "\n",
                 FILE_APPEND
             );
-    
-            flash(
-                'İş durdurulamadı: ' . $e->getMessage(),
-                'error'
-            );
+
+            flash('İş durdurulamadı: ' . $e->getMessage(), 'error');
         }
-    
+
         $back = $_POST['back'] ?? $HOME_URL;
-    
         header('Location: ' . $back);
         exit;
     }
 
+    // ============ ÇOKLU İPTAL ============
     if ($action === 'cancel_jobs') {
-
         $jobIds = $_POST['job_ids'] ?? [];
-    
+
         if (!is_array($jobIds)) {
             $jobIds = [$jobIds];
         }
-    
+
         try {
-    
             $msg = cancel_jobs($jobIds);
-    
+
             $_SESSION['worker_output'] = $msg;
-    
             flash($msg, 'info');
-    
+
         } catch (Throwable $e) {
-    
             @file_put_contents(
                 LOG_FILE,
                 '[' . date('Y-m-d H:i:s') . '] cancel_jobs HATA: ' .
-                $e->getMessage() .
-                "\n",
+                $e->getMessage() . "\n",
                 FILE_APPEND
             );
-    
-            flash(
-                'İşler durdurulamadı: ' . $e->getMessage(),
-                'error'
-            );
+
+            flash('İşler durdurulamadı: ' . $e->getMessage(), 'error');
         }
-    
+
         $back = $_POST['back'] ?? $HOME_URL;
-    
         header('Location: ' . $back);
         exit;
     }
 
+    // ============ TÜMÜNÜ İPTAL ============
+    if ($action === 'cancel_all_jobs') {
+        try {
+            $msg = cancel_all_jobs();
+
+            $_SESSION['worker_output'] = $msg;
+            flash($msg, 'info');
+
+        } catch (Throwable $e) {
+            @file_put_contents(
+                LOG_FILE,
+                '[' . date('Y-m-d H:i:s') . '] cancel_all_jobs HATA: ' .
+                $e->getMessage() . "\n",
+                FILE_APPEND
+            );
+
+            flash('İşler durdurulamadı: ' . $e->getMessage(), 'error');
+        }
+
+        $back = $_POST['back'] ?? $HOME_URL;
+        header('Location: ' . $back);
+        exit;
+    }
+
+    // ============ ONAY ============
     if ($action === 'approve') {
         $jid = (int)($_POST['job_id'] ?? 0);
         try {
@@ -759,6 +736,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?job=' . $jid); exit;
     }
 
+    // ============ RED ============
     if ($action === 'reject') {
         $jid = (int)($_POST['job_id'] ?? 0);
         try {
@@ -773,13 +751,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $HOME_URL); exit;
     }
 
+    // ============ RETRY ============
     if ($action === 'retry') {
         $jid = (int)($_POST['job_id'] ?? 0);
+
         try {
-            db()->prepare("UPDATE jobs SET status='queued', stage='uploaded', progress=0, error_msg=NULL WHERE id=?")->execute([$jid]);
-            flash("İş #$jid yeniden kuyruğa alındı", 'success');
-        } catch (Throwable $e) { flash('Hata: '.$e->getMessage(), 'error'); }
-        header('Location: ?job=' . $jid); exit;
+            if ($jid <= 0) {
+                throw new Exception('Geçersiz iş numarası.');
+            }
+
+            $stmt = db()->prepare(
+                "UPDATE jobs
+                 SET
+                     status='queued',
+                     stage='uploaded',
+                     progress=0,
+                     error_msg=NULL
+                 WHERE id=?"
+            );
+
+            $stmt->execute([$jid]);
+
+            if ($stmt->rowCount() === 0) {
+                throw new Exception(
+                    "İş bulunamadı veya yeniden kuyruğa alınamadı: #{$jid}"
+                );
+            }
+
+            /*
+             * Retry sonrası worker otomatik başlasın.
+             */
+            $workerMsg = run_worker();
+
+            $_SESSION['worker_output'] = $workerMsg;
+
+            @file_put_contents(
+                LOG_FILE,
+                '[' . date('Y-m-d H:i:s') . '] retry->worker: ' .
+                $workerMsg . "\n",
+                FILE_APPEND
+            );
+
+            flash("İş #{$jid} yeniden kuyruğa alındı.", 'success');
+
+        } catch (Throwable $e) {
+            flash('Hata: ' . $e->getMessage(), 'error');
+        }
+
+        header('Location: ?job=' . $jid);
+        exit;
     }
 }
 
@@ -956,6 +976,7 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;u
 .flash{
     padding:12px 14px;border-radius:12px;margin-bottom:12px;
     font-size:14px;border:1px solid transparent;
+    white-space:pre-wrap;
 }
 .flash.success{background:#052e16;color:#86efac;border-color:#14532d}
 .flash.error{background:#450a0a;color:#fca5a5;border-color:#7f1d1d}
@@ -997,11 +1018,19 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;u
     display:flex;gap:12px;align-items:center;
     padding:11px;border:1px solid #1f1f23;border-radius:12px;
     margin-bottom:8px;background:#18181b;
-    text-decoration:none;color:inherit;
     transition:border-color .15s;
 }
 .jobrow:active{background:#1f1f23}
 .jobrow.active{border-color:#3b82f6;background:#0c1e3a}
+.jobrow > a{
+    display:flex;gap:12px;align-items:center;
+    flex:1;min-width:0;color:inherit;text-decoration:none;
+}
+.job-checkbox{
+    width:20px;height:20px;flex-shrink:0;
+    accent-color:#3b82f6;cursor:pointer;margin:0;
+}
+.job-spacer{width:20px;flex-shrink:0}
 .jobrow .thumb{
     width:56px;height:56px;border-radius:10px;overflow:hidden;
     background:#000;flex-shrink:0;
@@ -1032,6 +1061,7 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;u
 .b-app{background:#1e3a8a;color:#93c5fd}
 .b-rej{background:#4c1d24;color:#fda4af}
 .b-fail{background:#7f1d1d;color:#fca5a5}
+.b-cancelled{background:#3f3f46;color:#d4d4d8}
 
 .detail-head{
     background:linear-gradient(180deg,#131316,#0c0c0f);
@@ -1361,18 +1391,60 @@ textarea{resize:vertical;min-height:80px}
 
         <?php else: ?>
 
+            <?php $jid = (int)$J['id']; ?>
+
             <h2>⚡ İşlemler</h2>
             <div class="card">
+
                 <div class="actions" style="margin-top:0">
-                    <form method="post" style="flex:1;min-width:120px"><input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="action" value="run_worker"><input type="hidden" name="back" value="?job=<?= (int)$J['id'] ?>"><button class="btn green full" type="submit">▶ Worker</button></form>
-                    <form method="post" style="flex:1;min-width:120px"><input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="action" value="retry"><input type="hidden" name="job_id" value="<?= (int)$J['id'] ?>"><button class="btn gray full" type="submit">🔄 Yeniden Dene</button></form>
+
+                    <?php if (in_array($J['status'], ['queued', 'processing'], true)): ?>
+                        <form method="post"
+                              style="flex:1;min-width:120px"
+                              onsubmit="return confirm('İş #<?= $jid ?> durdurulsun mu?');">
+                            <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                            <input type="hidden" name="action" value="cancel_job">
+                            <input type="hidden" name="job_id" value="<?= $jid ?>">
+                            <input type="hidden" name="back" value="?job=<?= $jid ?>">
+                            <button class="btn red full" type="submit">🛑 Durdur</button>
+                        </form>
+                    <?php endif; ?>
+
+                    <?php if (in_array($J['status'], ['cancelled', 'failed'], true)): ?>
+                        <form method="post" style="flex:1;min-width:120px">
+                            <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                            <input type="hidden" name="action" value="retry">
+                            <input type="hidden" name="job_id" value="<?= $jid ?>">
+                            <button class="btn gray full" type="submit">🔄 Yeniden Dene</button>
+                        </form>
+                    <?php endif; ?>
+
+                    <form method="post" style="flex:1;min-width:120px">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="run_worker">
+                        <input type="hidden" name="back" value="?job=<?= $jid ?>">
+                        <button class="btn green full" type="submit">▶ Worker</button>
+                    </form>
+
                 </div>
+
                 <?php if ($previewUrl): ?>
                 <div class="actions">
-                    <form method="post" style="flex:1;min-width:120px"><input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="action" value="approve"><input type="hidden" name="job_id" value="<?= (int)$J['id'] ?>"><button class="btn primary full" type="submit">✅ Onayla</button></form>
-                    <form method="post" style="flex:1;min-width:120px"><input type="hidden" name="csrf" value="<?= h($CSRF) ?>"><input type="hidden" name="action" value="reject"><input type="hidden" name="job_id" value="<?= (int)$J['id'] ?>"><button class="btn red full" type="submit">❌ Reddet</button></form>
+                    <form method="post" style="flex:1;min-width:120px">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="approve">
+                        <input type="hidden" name="job_id" value="<?= $jid ?>">
+                        <button class="btn primary full" type="submit">✅ Onayla</button>
+                    </form>
+                    <form method="post" style="flex:1;min-width:120px">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="reject">
+                        <input type="hidden" name="job_id" value="<?= $jid ?>">
+                        <button class="btn red full" type="submit">❌ Reddet</button>
+                    </form>
                 </div>
                 <?php endif; ?>
+
                 <div style="margin-top:12px">
                     <a class="btn gray full sm" href="<?= h($HOME_URL) ?>">← Ana Sayfa</a>
                 </div>
@@ -1409,6 +1481,56 @@ textarea{resize:vertical;min-height:80px}
         <?php if (!$J): ?>
 
             <h2>📋 İşler (<?= count($jobs) ?>)</h2>
+
+            <?php if (!empty($jobs)): ?>
+
+                <form method="post"
+                      id="bulkCancelForm"
+                      onsubmit="return prepareBulkCancel();"
+                      style="margin-bottom:10px">
+
+                    <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                    <input type="hidden" name="action" value="cancel_jobs">
+                    <input type="hidden" name="back" value="<?= h($HOME_URL) ?>">
+
+                    <div class="card tight"
+                         style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+
+                        <button type="button" class="btn gray sm" onclick="selectActiveJobs()">
+                            ☑ Aktifleri Seç
+                        </button>
+
+                        <button type="button" class="btn gray sm" onclick="clearJobSelection()">
+                            ☐ Seçimi Temizle
+                        </button>
+
+                        <button type="submit" class="btn red sm">
+                            🛑 Seçilenleri Durdur
+                        </button>
+
+                        <span id="selectedCount" style="font-size:11px;color:#71717a;margin-left:auto">
+                            0 seçili
+                        </span>
+                    </div>
+
+                    <div id="bulkCancelInputs"></div>
+                </form>
+
+                <form method="post"
+                      style="margin-bottom:12px"
+                      onsubmit="return confirm('Kuyruktaki ve çalışan TÜM işleri durdurmak istediğinize emin misiniz?');">
+
+                    <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                    <input type="hidden" name="action" value="cancel_all_jobs">
+                    <input type="hidden" name="back" value="<?= h($HOME_URL) ?>">
+
+                    <button type="submit" class="btn red sm">
+                        🛑 Tüm Aktif İşleri Durdur
+                    </button>
+                </form>
+
+            <?php endif; ?>
+
             <div class="card tight">
             <?php if (empty($jobs)): ?>
                 <p style="color:#71717a;margin:8px 4px">Henüz iş yok.</p>
@@ -1417,28 +1539,41 @@ textarea{resize:vertical;min-height:80px}
                 $hasPrev = in_array($j['status'], ['preview_ready','approved','done'], true);
                 $jm = $j['method'] ?? null;
                 $jb = $j['output_bitdepth'] ?? null;
+                $selectable = in_array($j['status'], ['queued', 'processing'], true);
             ?>
-                <a class="jobrow" href="?job=<?= $jid ?>">
-                    <div class="thumb">
-                        <?php if ($hasPrev): ?>
-                            <img src="api/get-image.php?job_id=<?= $jid ?>&role=preview&t=<?= time() ?>" alt="" loading="lazy">
-                        <?php else: ?>yok<?php endif; ?>
-                    </div>
-                    <div class="meta">
-                        <div class="title">#<?= $jid ?> · <?= h($j['sku']) ?></div>
-                        <div class="sub">
-                            <span class="badge <?= badge($j['status']) ?>"><?= h(badge_label($j['status'])) ?></span>
-                            <span>%<?= (int)$j['progress'] ?></span>
-                            <span><?= (int)$j['file_count'] ?> dosya</span>
-                            <?php if ($jm): ?><span class="pill"><?= h($jm) ?></span><?php endif; ?>
-                            <?php if ($jb): ?><span class="pill"><?= (int)$jb ?>-bit</span><?php endif; ?>
+                <div class="jobrow <?= $selectedId === $jid ? 'active' : '' ?>">
+
+                    <?php if ($selectable): ?>
+                        <input type="checkbox"
+                               class="job-checkbox"
+                               value="<?= $jid ?>"
+                               onclick="updateSelectedCount();">
+                    <?php else: ?>
+                        <span class="job-spacer"></span>
+                    <?php endif; ?>
+
+                    <a href="?job=<?= $jid ?>">
+                        <div class="thumb">
+                            <?php if ($hasPrev): ?>
+                                <img src="api/get-image.php?job_id=<?= $jid ?>&role=preview&t=<?= time() ?>" alt="" loading="lazy">
+                            <?php else: ?>yok<?php endif; ?>
                         </div>
-                        <?php if (!empty($j['error_msg'])): ?>
-                            <div class="err">⚠ <?= h(mb_substr($j['error_msg'], 0, 70)) ?></div>
-                        <?php endif; ?>
-                        <div class="date"><?= h($j['created_at']) ?></div>
-                    </div>
-                </a>
+                        <div class="meta">
+                            <div class="title">#<?= $jid ?> · <?= h($j['sku']) ?></div>
+                            <div class="sub">
+                                <span class="badge <?= badge($j['status'], $j['error_msg'] ?? '') ?>"><?= h(badge_label($j['status'], $j['error_msg'] ?? '')) ?></span>
+                                <span>%<?= (int)$j['progress'] ?></span>
+                                <span><?= (int)$j['file_count'] ?> dosya</span>
+                                <?php if ($jm): ?><span class="pill"><?= h($jm) ?></span><?php endif; ?>
+                                <?php if ($jb): ?><span class="pill"><?= (int)$jb ?>-bit</span><?php endif; ?>
+                            </div>
+                            <?php if (!empty($j['error_msg'])): ?>
+                                <div class="err">⚠ <?= h(mb_substr($j['error_msg'], 0, 70)) ?></div>
+                            <?php endif; ?>
+                            <div class="date"><?= h($j['created_at']) ?></div>
+                        </div>
+                    </a>
+                </div>
             <?php endforeach; endif; ?>
             </div>
 
@@ -1456,7 +1591,7 @@ textarea{resize:vertical;min-height:80px}
             <div class="detail-head">
                 <div style="font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:.6px">İş #<?= $jid ?></div>
                 <div class="sku"><?= h($J['sku']) ?></div>
-                <span class="badge <?= badge($J['status']) ?>"><?= h(badge_label($J['status'])) ?></span>
+                <span class="badge <?= badge($J['status'], $J['error_msg'] ?? '') ?>"><?= h(badge_label($J['status'], $J['error_msg'] ?? '')) ?></span>
                 <span style="color:#a1a1aa;margin-left:8px;font-size:12px"><?= h($J['stage']) ?> · %<?= (int)$J['progress'] ?></span>
                 <?php if ($jm): ?><span class="pill" style="margin-left:6px"><?= h($jm) ?></span><?php endif; ?>
                 <?php if ($jb): ?><span class="pill" style="margin-left:4px"><?= (int)$jb ?>-bit</span><?php endif; ?>
@@ -1939,6 +2074,69 @@ textarea{resize:vertical;min-height:80px}
 })();
 
 // ============================================================
+// İŞ SEÇİMİ / ÇOKLU DURDURMA
+// ============================================================
+(function(){
+    'use strict';
+
+    function getCheckboxes() {
+        return Array.from(document.querySelectorAll('.job-checkbox'));
+    }
+
+    function getSelectedJobs() {
+        return getCheckboxes()
+            .filter(function(el) { return el.checked; })
+            .map(function(el) { return el.value; });
+    }
+
+    window.updateSelectedCount = function() {
+        const count = getSelectedJobs().length;
+        const el = document.getElementById('selectedCount');
+        if (el) el.textContent = count + ' seçili';
+    };
+
+    window.selectActiveJobs = function() {
+        getCheckboxes().forEach(function(el) { el.checked = true; });
+        updateSelectedCount();
+    };
+
+    window.clearJobSelection = function() {
+        getCheckboxes().forEach(function(el) { el.checked = false; });
+        updateSelectedCount();
+    };
+
+    window.prepareBulkCancel = function() {
+        const ids = getSelectedJobs();
+
+        if (!ids.length) {
+            alert('Önce durdurulacak en az bir iş seçin.');
+            return false;
+        }
+
+        if (!confirm(ids.length + ' iş durdurulacak. Devam etmek istiyor musunuz?')) {
+            return false;
+        }
+
+        const container = document.getElementById('bulkCancelInputs');
+        if (!container) return false;
+
+        container.innerHTML = '';
+
+        ids.forEach(function(id) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'job_ids[]';
+            input.value = id;
+            container.appendChild(input);
+        });
+
+        return true;
+    };
+
+    updateSelectedCount();
+})();
+
+// ============================================================
 // OTOMATİK YENİLEME
 // ============================================================
 <?php if ($autoRefresh): ?>
@@ -1948,14 +2146,17 @@ textarea{resize:vertical;min-height:80px}
         if (document.hidden) return;
         count++;
         if (count > 120) { clearInterval(t); return; }
-        
-        // Sadece status'u fetch ile çek (tam reload yok)
-            fetch('api/jobs-status.php?job_id=' + <?= (int)($J['id'] ?? 0) ?>)
+
+        fetch('api/jobs-status.php?job_id=' + <?= (int)($J['id'] ?? 0) ?>)
             .then(r => r.json())
             .then(d => {
-                if (d.status && d.status !== 'processing') location.reload();
+                if (
+                    d.status &&
+                    ['queued', 'processing'].indexOf(d.status) === -1
+                ) {
+                    location.reload();
+                }
             });
-
 
     }, 5000);
 })();

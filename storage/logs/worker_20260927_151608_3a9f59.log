@@ -1,0 +1,13 @@
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #31 işleniyor ══
+[worker] 9 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=9  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 2.14s  ilk=(4608, 3456, 3)  dtype=uint8  boyutlar=[(4608, 3456)]
+[stack] 2) resize: 0.00s  hedef=3456x4608  N=9
+[stack] 3) preprocess: 11.38s
+[stack] 4) alignment: 2.46s  ref=4  mean=0.963  min=0.861
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(4608, 3456, 3)  dtype=uint8
+/bin/python' -u -m worker.worker --once > '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/storage/logs/worker_20260927_151608_3a9f59.log' 2>&1 & echo $! > '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/storage/worker.pid'
+

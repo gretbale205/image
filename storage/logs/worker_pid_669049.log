@@ -1,0 +1,57 @@
+[2026-09-27 20:33:31] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_669049.log
+[2026-09-27 20:33:31] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=669049
+[2026-09-27 20:33:31] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-27 20:33:31] [INFO] ══ Job #31 işleniyor ══
+[2026-09-27 20:33:31] [INFO] 9 görüntü işlenecek
+[2026-09-27 20:33:32] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-27 20:33:32] [INFO] ▶ stack_images başlıyor
+[2026-09-27 20:33:32] [INFO] [stack] ═══ BAŞLA: N=9  method=pyramid  bitdepth=8  align=True
+[2026-09-27 20:33:34] [INFO] [stack] 1) yükleme: 1.92s  ilk=(4608, 3456, 3)  dtype=uint8
+[2026-09-27 20:33:34] [INFO] [stack] 2) resize: 0.00s  hedef=3456x4608  N=9
+[2026-09-27 20:33:41] [INFO] [stack] 3) preprocess: 7.26s
+[2026-09-27 20:33:44] [INFO] [stack] 4) alignment: 2.43s  ref=4  mean=0.963  min=0.861
+[2026-09-27 20:33:44] [INFO] [stack] 5) focus_input hazır: 0.00s  N=9  shape=(4608, 3456, 3)  dtype=uint8
+[2026-09-27 20:33:44] [INFO] [focus_maps] başlıyor: N=9  3456x4608
+[2026-09-27 20:33:45] [INFO] [focus_maps] 1/9 tamamlandı (1.2s)
+[2026-09-27 20:33:47] [INFO] [focus_maps] 2/9 tamamlandı (1.4s)
+[2026-09-27 20:33:48] [INFO] [focus_maps] 3/9 tamamlandı (1.2s)
+[2026-09-27 20:33:49] [INFO] [focus_maps] 4/9 tamamlandı (1.1s)
+[2026-09-27 20:33:50] [INFO] [focus_maps] 5/9 tamamlandı (1.1s)
+[2026-09-27 20:33:51] [INFO] [focus_maps] 6/9 tamamlandı (1.0s)
+[2026-09-27 20:33:53] [INFO] [focus_maps] 7/9 tamamlandı (1.5s)
+[2026-09-27 20:33:55] [INFO] [focus_maps] 8/9 tamamlandı (1.7s)
+[2026-09-27 20:33:57] [INFO] [focus_maps] 9/9 tamamlandı (1.8s)
+[2026-09-27 20:33:57] [INFO] [focus_maps] normalize başlıyor (toplam 13.0s)
+[2026-09-27 20:34:19] [INFO] [focus_maps] bitti: toplam 35.5s
+[2026-09-27 20:34:20] [INFO] [stack] 6) focus_maps: 36.42s  shape=(9, 4608, 3456)  min=0.0000  max=1.0000
+[2026-09-27 20:34:20] [INFO] [stack] 7) blending başlıyor (bu adım uzun sürebilir)
+[2026-09-27 20:34:26] [INFO] [blend] compute_weights: 9 görüntü Gaussian blur
+[2026-09-27 20:34:26] [INFO] [blend] weights blur 1/9
+[2026-09-27 20:34:26] [INFO] [blend] weights blur 2/9
+[2026-09-27 20:34:27] [INFO] [blend] weights blur 3/9
+[2026-09-27 20:34:27] [INFO] [blend] weights blur 4/9
+[2026-09-27 20:34:27] [INFO] [blend] weights blur 5/9
+[2026-09-27 20:34:27] [INFO] [blend] weights blur 6/9
+[2026-09-27 20:34:27] [INFO] [blend] weights blur 7/9
+[2026-09-27 20:34:28] [INFO] [blend] weights blur 8/9
+[2026-09-27 20:34:28] [INFO] [blend] weights blur 9/9
+[2026-09-27 20:34:30] [INFO] [stack] 7a) weights: 9.82s
+[2026-09-27 20:34:30] [INFO] [blend] pyramid_blend BAŞLIYOR: N=9  3456x4608  levels=5  C=3
+[2026-09-27 20:34:30] [INFO] [blend] pyramid 1/9 başlıyor
+[2026-09-27 20:34:33] [INFO] [stack] HATA pyramid blend: ValueError: operands could not be broadcast together with shapes (2304,1728,3) (2304,1728) 
+[2026-09-27 20:34:33] [INFO] Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 306, in stack_images
+    result = pyramid_blend(
+             ^^^^^^^^^^^^^^
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/blending.py", line 344, in pyramid_blend
+    accum[l] += lp_l * wp_l
+                ~~~~~^~~~~~
+ValueError: operands could not be broadcast together with shapes (2304,1728,3) (2304,1728) 
+
+[2026-09-27 20:34:34] [ERROR] ✗ Job #31 HATA: Exception: Stacking başarısız
+[2026-09-27 20:34:34] [ERROR] Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/worker.py", line 266, in process_job
+    raise Exception("Stacking başarısız")
+Exception: Stacking başarısız
+
+[2026-09-27 20:34:34] [INFO] --once modu bitti

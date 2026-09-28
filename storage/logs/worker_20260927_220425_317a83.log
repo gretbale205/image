@@ -1,0 +1,180 @@
+[2026-09-28 01:04:26] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_701752.log
+[2026-09-28 01:04:26] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=701752
+[2026-09-28 01:04:26] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-28 01:04:26] [INFO] ══ Job #30 işleniyor ══
+[2026-09-28 01:04:26] [INFO] 9 görüntü işlenecek
+[2026-09-28 01:04:26] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-28 01:04:26] [INFO] ▶ stack_images başlıyor
+[stack] ═══ BAŞLA: N=9  method=pyramid  bitdepth=8  align=True
+[2026-09-28 01:04:26] [INFO] [stack] ═══ BAŞLA: N=9  method=pyramid  bitdepth=8  align=True
+[stack] 1) yükleme: 1.83s  ilk=(4608, 3456, 3)  dtype=uint8
+[2026-09-28 01:04:28] [INFO] [stack] 1) yükleme: 1.83s  ilk=(4608, 3456, 3)  dtype=uint8
+[stack] 2) resize: 0.00s  hedef=3456x4608  N=9
+[2026-09-28 01:04:42] [INFO] [stack] 2) resize: 0.00s  hedef=3456x4608  N=9
+[stack] 3) preprocess: 6.58s
+[2026-09-28 01:04:48] [INFO] [stack] 3) preprocess: 6.58s
+[stack] 4) alignment: 1.98s  ref=4  mean=0.971  min=0.885
+[2026-09-28 01:04:50] [INFO] [stack] 4) alignment: 1.98s  ref=4  mean=0.971  min=0.885
+[stack] 5) focus_input hazır: 0.00s  N=9  shape=(4608, 3456, 3)  dtype=uint8
+[2026-09-28 01:04:50] [INFO] [stack] 5) focus_input hazır: 0.00s  N=9  shape=(4608, 3456, 3)  dtype=uint8
+[focus_maps] başlıyor: N=9  3456x4608
+[focus_maps] başlıyor: N=9  3456x4608
+[2026-09-28 01:04:50] [INFO] [focus_maps] başlıyor: N=9  3456x4608
+[focus_maps] 1/9 tamamlandı (0.9s)
+[focus_maps] 1/9 tamamlandı (0.9s)
+[2026-09-28 01:04:51] [INFO] [focus_maps] 1/9 tamamlandı (0.9s)
+[focus_maps] 2/9 tamamlandı (1.4s)
+[focus_maps] 2/9 tamamlandı (1.4s)
+[2026-09-28 01:04:53] [INFO] [focus_maps] 2/9 tamamlandı (1.4s)
+[focus_maps] 3/9 tamamlandı (1.7s)
+[focus_maps] 3/9 tamamlandı (1.7s)
+[2026-09-28 01:04:55] [INFO] [focus_maps] 3/9 tamamlandı (1.7s)
+[focus_maps] 4/9 tamamlandı (1.7s)
+[focus_maps] 4/9 tamamlandı (1.7s)
+[2026-09-28 01:04:57] [INFO] [focus_maps] 4/9 tamamlandı (1.7s)
+[focus_maps] 5/9 tamamlandı (1.2s)
+[focus_maps] 5/9 tamamlandı (1.2s)
+[2026-09-28 01:04:58] [INFO] [focus_maps] 5/9 tamamlandı (1.2s)
+[focus_maps] 6/9 tamamlandı (1.3s)
+[focus_maps] 6/9 tamamlandı (1.3s)
+[2026-09-28 01:04:59] [INFO] [focus_maps] 6/9 tamamlandı (1.3s)
+[focus_maps] 7/9 tamamlandı (1.2s)
+[focus_maps] 7/9 tamamlandı (1.2s)
+[2026-09-28 01:05:01] [INFO] [focus_maps] 7/9 tamamlandı (1.2s)
+[focus_maps] 8/9 tamamlandı (2.0s)
+[focus_maps] 8/9 tamamlandı (2.0s)
+[2026-09-28 01:05:03] [INFO] [focus_maps] 8/9 tamamlandı (2.0s)
+[focus_maps] 9/9 tamamlandı (1.8s)
+[focus_maps] 9/9 tamamlandı (1.8s)
+[2026-09-28 01:05:05] [INFO] [focus_maps] 9/9 tamamlandı (1.8s)
+[focus_maps] normalize başlıyor (toplam 14.4s)
+[focus_maps] normalize başlıyor (toplam 14.4s)
+[2026-09-28 01:05:05] [INFO] [focus_maps] normalize başlıyor (toplam 14.4s)
+[focus_maps] bitti: toplam 37.4s
+[focus_maps] bitti: toplam 37.4s
+[2026-09-28 01:05:28] [INFO] [focus_maps] bitti: toplam 37.4s
+[stack] 6) focus_maps: 38.46s  shape=(9, 4608, 3456)  min=0.0000  max=1.0000
+[2026-09-28 01:05:29] [INFO] [stack] 6) focus_maps: 38.46s  shape=(9, 4608, 3456)  min=0.0000  max=1.0000
+[stack] 7) blending başlıyor (bu adım uzun sürebilir)
+[2026-09-28 01:05:29] [INFO] [stack] 7) blending başlıyor (bu adım uzun sürebilir)
+[blend] compute_weights: 9 görüntü Gaussian blur
+[blend] compute_weights: 9 görüntü Gaussian blur
+[2026-09-28 01:05:35] [INFO] [blend] compute_weights: 9 görüntü Gaussian blur
+[blend] weights blur 1/9
+[blend] weights blur 1/9
+[2026-09-28 01:05:35] [INFO] [blend] weights blur 1/9
+[blend] weights blur 2/9
+[blend] weights blur 2/9
+[2026-09-28 01:05:35] [INFO] [blend] weights blur 2/9
+[blend] weights blur 3/9
+[blend] weights blur 3/9
+[2026-09-28 01:05:35] [INFO] [blend] weights blur 3/9
+[blend] weights blur 4/9
+[blend] weights blur 4/9
+[2026-09-28 01:05:36] [INFO] [blend] weights blur 4/9
+[blend] weights blur 5/9
+[blend] weights blur 5/9
+[2026-09-28 01:05:36] [INFO] [blend] weights blur 5/9
+[blend] weights blur 6/9
+[blend] weights blur 6/9
+[2026-09-28 01:05:36] [INFO] [blend] weights blur 6/9
+[blend] weights blur 7/9
+[blend] weights blur 7/9
+[2026-09-28 01:05:36] [INFO] [blend] weights blur 7/9
+[blend] weights blur 8/9
+[blend] weights blur 8/9
+[2026-09-28 01:05:37] [INFO] [blend] weights blur 8/9
+[blend] weights blur 9/9
+[blend] weights blur 9/9
+[2026-09-28 01:05:37] [INFO] [blend] weights blur 9/9
+[stack] 7a) weights: 10.28s
+[2026-09-28 01:05:39] [INFO] [stack] 7a) weights: 10.28s
+[blend] pyramid_blend BAŞLIYOR: N=9  3456x4608  levels=5  C=3
+[blend] pyramid_blend BAŞLIYOR: N=9  3456x4608  levels=5  C=3
+[2026-09-28 01:05:39] [INFO] [blend] pyramid_blend BAŞLIYOR: N=9  3456x4608  levels=5  C=3
+[blend] pyramid 1/9 başlıyor
+[blend] pyramid 1/9 başlıyor
+[2026-09-28 01:05:39] [INFO] [blend] pyramid 1/9 başlıyor
+[blend] pyramid 1/9 tamamlandı (3.7s)
+[blend] pyramid 1/9 tamamlandı (3.7s)
+[2026-09-28 01:05:43] [INFO] [blend] pyramid 1/9 tamamlandı (3.7s)
+[blend] pyramid 2/9 başlıyor
+[blend] pyramid 2/9 başlıyor
+[2026-09-28 01:05:43] [INFO] [blend] pyramid 2/9 başlıyor
+[blend] pyramid 2/9 tamamlandı (2.5s)
+[blend] pyramid 2/9 tamamlandı (2.5s)
+[2026-09-28 01:05:46] [INFO] [blend] pyramid 2/9 tamamlandı (2.5s)
+[blend] pyramid 3/9 başlıyor
+[blend] pyramid 3/9 başlıyor
+[2026-09-28 01:05:46] [INFO] [blend] pyramid 3/9 başlıyor
+[blend] pyramid 3/9 tamamlandı (2.7s)
+[blend] pyramid 3/9 tamamlandı (2.7s)
+[2026-09-28 01:05:49] [INFO] [blend] pyramid 3/9 tamamlandı (2.7s)
+[blend] pyramid 4/9 başlıyor
+[blend] pyramid 4/9 başlıyor
+[2026-09-28 01:05:49] [INFO] [blend] pyramid 4/9 başlıyor
+[blend] pyramid 4/9 tamamlandı (2.2s)
+[blend] pyramid 4/9 tamamlandı (2.2s)
+[2026-09-28 01:05:51] [INFO] [blend] pyramid 4/9 tamamlandı (2.2s)
+[blend] pyramid 5/9 başlıyor
+[blend] pyramid 5/9 başlıyor
+[2026-09-28 01:05:51] [INFO] [blend] pyramid 5/9 başlıyor
+[blend] pyramid 5/9 tamamlandı (2.3s)
+[blend] pyramid 5/9 tamamlandı (2.3s)
+[2026-09-28 01:05:53] [INFO] [blend] pyramid 5/9 tamamlandı (2.3s)
+[blend] pyramid 6/9 başlıyor
+[blend] pyramid 6/9 başlıyor
+[2026-09-28 01:05:53] [INFO] [blend] pyramid 6/9 başlıyor
+[blend] pyramid 6/9 tamamlandı (2.5s)
+[blend] pyramid 6/9 tamamlandı (2.5s)
+[2026-09-28 01:05:56] [INFO] [blend] pyramid 6/9 tamamlandı (2.5s)
+[blend] pyramid 7/9 başlıyor
+[blend] pyramid 7/9 başlıyor
+[2026-09-28 01:05:56] [INFO] [blend] pyramid 7/9 başlıyor
+[blend] pyramid 7/9 tamamlandı (2.1s)
+[blend] pyramid 7/9 tamamlandı (2.1s)
+[2026-09-28 01:05:58] [INFO] [blend] pyramid 7/9 tamamlandı (2.1s)
+[blend] pyramid 8/9 başlıyor
+[blend] pyramid 8/9 başlıyor
+[2026-09-28 01:05:58] [INFO] [blend] pyramid 8/9 başlıyor
+[blend] pyramid 8/9 tamamlandı (2.3s)
+[blend] pyramid 8/9 tamamlandı (2.3s)
+[2026-09-28 01:06:01] [INFO] [blend] pyramid 8/9 tamamlandı (2.3s)
+[blend] pyramid 9/9 başlıyor
+[blend] pyramid 9/9 başlıyor
+[2026-09-28 01:06:01] [INFO] [blend] pyramid 9/9 başlıyor
+[blend] pyramid 9/9 tamamlandı (2.6s)
+[blend] pyramid 9/9 tamamlandı (2.6s)
+[2026-09-28 01:06:03] [INFO] [blend] pyramid 9/9 tamamlandı (2.6s)
+[blend] pyramid toplam akümülasyon: 24.0s
+[blend] pyramid toplam akümülasyon: 24.0s
+[2026-09-28 01:06:03] [INFO] [blend] pyramid toplam akümülasyon: 24.0s
+[blend] pyramid collapse başlıyor
+[blend] pyramid collapse başlıyor
+[2026-09-28 01:06:03] [INFO] [blend] pyramid collapse başlıyor
+[blend] collapse seviye 4 tamam
+[blend] collapse seviye 4 tamam
+[2026-09-28 01:06:04] [INFO] [blend] collapse seviye 4 tamam
+[blend] collapse seviye 3 tamam
+[blend] collapse seviye 3 tamam
+[2026-09-28 01:06:04] [INFO] [blend] collapse seviye 3 tamam
+[blend] collapse seviye 2 tamam
+[blend] collapse seviye 2 tamam
+[2026-09-28 01:06:04] [INFO] [blend] collapse seviye 2 tamam
+[blend] collapse seviye 1 tamam
+[blend] collapse seviye 1 tamam
+[2026-09-28 01:06:04] [INFO] [blend] collapse seviye 1 tamam
+[blend] collapse toplam: 0.6s
+[blend] collapse toplam: 0.6s
+[2026-09-28 01:06:04] [INFO] [blend] collapse toplam: 0.6s
+[stack] 7b) pyramid_blend: 25.18s
+[2026-09-28 01:06:05] [INFO] [stack] 7b) pyramid_blend: 25.18s
+[stack] 7c) post-process: 8.12s
+[2026-09-28 01:06:13] [INFO] [stack] 7c) post-process: 8.12s
+[stack] 8) yazma: 0.06s  dosya=stacked_30.jpg  boyut=4230.2 KB
+[2026-09-28 01:06:30] [INFO] [stack] 8) yazma: 0.06s  dosya=stacked_30.jpg  boyut=4230.2 KB
+[stack] ═══ BİTİŞ: 124.33s  N=9  3456x4608  pyramid/8bit
+[2026-09-28 01:06:32] [INFO] [stack] ═══ BİTİŞ: 124.33s  N=9  3456x4608  pyramid/8bit
+[2026-09-28 01:06:33] [INFO] ✔ stack_images tamamlandı (126.8s)
+[2026-09-28 01:06:34] [INFO] ✓ Job #30 tamamlandı
+[2026-09-28 01:06:34] [INFO] --once modu bitti

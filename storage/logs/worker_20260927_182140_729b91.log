@@ -1,0 +1,310 @@
+[2026-09-27 21:21:41] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_675458.log
+[2026-09-27 21:21:41] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=675458
+[2026-09-27 21:21:41] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-27 21:21:41] [INFO] ══ Job #32 işleniyor ══
+[2026-09-27 21:21:41] [INFO] 20 görüntü işlenecek
+[2026-09-27 21:21:41] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-27 21:21:41] [INFO] ▶ stack_images başlıyor
+[stack] ═══ BAŞLA: N=20  method=pyramid  bitdepth=8  align=True
+[2026-09-27 21:21:41] [INFO] [stack] ═══ BAŞLA: N=20  method=pyramid  bitdepth=8  align=True
+[stack] 1) yükleme: 0.02s  ilk=(217, 325, 3)  dtype=uint8
+[2026-09-27 21:21:41] [INFO] [stack] 1) yükleme: 0.02s  ilk=(217, 325, 3)  dtype=uint8
+[stack] 2) resize: 0.00s  hedef=325x217  N=20
+[2026-09-27 21:21:41] [INFO] [stack] 2) resize: 0.00s  hedef=325x217  N=20
+[stack] 3) preprocess: 0.03s
+[2026-09-27 21:21:41] [INFO] [stack] 3) preprocess: 0.03s
+[stack] 4) alignment: 0.25s  ref=10  mean=0.979  min=0.951
+[2026-09-27 21:21:42] [INFO] [stack] 4) alignment: 0.25s  ref=10  mean=0.979  min=0.951
+[stack] 5) focus_input hazır: 0.00s  N=20  shape=(217, 325, 3)  dtype=uint8
+[2026-09-27 21:21:42] [INFO] [stack] 5) focus_input hazır: 0.00s  N=20  shape=(217, 325, 3)  dtype=uint8
+[focus_maps] başlıyor: N=20  325x217
+[focus_maps] başlıyor: N=20  325x217
+[2026-09-27 21:21:42] [INFO] [focus_maps] başlıyor: N=20  325x217
+[focus_maps] 1/20 tamamlandı (0.0s)
+[focus_maps] 1/20 tamamlandı (0.0s)
+[2026-09-27 21:21:42] [INFO] [focus_maps] 1/20 tamamlandı (0.0s)
+[focus_maps] 2/20 tamamlandı (0.0s)
+[focus_maps] 2/20 tamamlandı (0.0s)
+[2026-09-27 21:21:42] [INFO] [focus_maps] 2/20 tamamlandı (0.0s)
+[focus_maps] 3/20 tamamlandı (0.0s)
+[focus_maps] 3/20 tamamlandı (0.0s)
+[2026-09-27 21:21:42] [INFO] [focus_maps] 3/20 tamamlandı (0.0s)
+[focus_maps] 4/20 tamamlandı (0.0s)
+[focus_maps] 4/20 tamamlandı (0.0s)
+[2026-09-27 21:21:42] [INFO] [focus_maps] 4/20 tamamlandı (0.0s)
+[focus_maps] 5/20 tamamlandı (0.0s)
+[focus_maps] 5/20 tamamlandı (0.0s)
+[2026-09-27 21:21:42] [INFO] [focus_maps] 5/20 tamamlandı (0.0s)
+[focus_maps] 6/20 tamamlandı (0.0s)
+[focus_maps] 6/20 tamamlandı (0.0s)
+[2026-09-27 21:21:42] [INFO] [focus_maps] 6/20 tamamlandı (0.0s)
+[focus_maps] 7/20 tamamlandı (0.0s)
+[focus_maps] 7/20 tamamlandı (0.0s)
+[2026-09-27 21:21:42] [INFO] [focus_maps] 7/20 tamamlandı (0.0s)
+[focus_maps] 8/20 tamamlandı (0.0s)
+[focus_maps] 8/20 tamamlandı (0.0s)
+[2026-09-27 21:21:42] [INFO] [focus_maps] 8/20 tamamlandı (0.0s)
+[focus_maps] 9/20 tamamlandı (0.0s)
+[focus_maps] 9/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 9/20 tamamlandı (0.0s)
+[focus_maps] 10/20 tamamlandı (0.0s)
+[focus_maps] 10/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 10/20 tamamlandı (0.0s)
+[focus_maps] 11/20 tamamlandı (0.0s)
+[focus_maps] 11/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 11/20 tamamlandı (0.0s)
+[focus_maps] 12/20 tamamlandı (0.0s)
+[focus_maps] 12/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 12/20 tamamlandı (0.0s)
+[focus_maps] 13/20 tamamlandı (0.0s)
+[focus_maps] 13/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 13/20 tamamlandı (0.0s)
+[focus_maps] 14/20 tamamlandı (0.0s)
+[focus_maps] 14/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 14/20 tamamlandı (0.0s)
+[focus_maps] 15/20 tamamlandı (0.0s)
+[focus_maps] 15/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 15/20 tamamlandı (0.0s)
+[focus_maps] 16/20 tamamlandı (0.0s)
+[focus_maps] 16/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 16/20 tamamlandı (0.0s)
+[focus_maps] 17/20 tamamlandı (0.0s)
+[focus_maps] 17/20 tamamlandı (0.0s)
+[2026-09-27 21:21:43] [INFO] [focus_maps] 17/20 tamamlandı (0.0s)
+[focus_maps] 18/20 tamamlandı (0.0s)
+[focus_maps] 18/20 tamamlandı (0.0s)
+[2026-09-27 21:21:44] [INFO] [focus_maps] 18/20 tamamlandı (0.0s)
+[focus_maps] 19/20 tamamlandı (0.0s)
+[focus_maps] 19/20 tamamlandı (0.0s)
+[2026-09-27 21:21:44] [INFO] [focus_maps] 19/20 tamamlandı (0.0s)
+[focus_maps] 20/20 tamamlandı (0.0s)
+[focus_maps] 20/20 tamamlandı (0.0s)
+[2026-09-27 21:21:44] [INFO] [focus_maps] 20/20 tamamlandı (0.0s)
+[focus_maps] normalize başlıyor (toplam 2.1s)
+[focus_maps] normalize başlıyor (toplam 2.1s)
+[2026-09-27 21:21:44] [INFO] [focus_maps] normalize başlıyor (toplam 2.1s)
+[focus_maps] bitti: toplam 2.1s
+[focus_maps] bitti: toplam 2.1s
+[2026-09-27 21:21:44] [INFO] [focus_maps] bitti: toplam 2.1s
+[stack] 6) focus_maps: 2.15s  shape=(20, 217, 325)  min=0.0000  max=1.0000
+[2026-09-27 21:21:44] [INFO] [stack] 6) focus_maps: 2.15s  shape=(20, 217, 325)  min=0.0000  max=1.0000
+[stack] 7) blending başlıyor (bu adım uzun sürebilir)
+[2026-09-27 21:21:44] [INFO] [stack] 7) blending başlıyor (bu adım uzun sürebilir)
+[blend] compute_weights: 20 görüntü Gaussian blur
+[blend] compute_weights: 20 görüntü Gaussian blur
+[2026-09-27 21:21:44] [INFO] [blend] compute_weights: 20 görüntü Gaussian blur
+[blend] weights blur 1/20
+[blend] weights blur 1/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 1/20
+[blend] weights blur 2/20
+[blend] weights blur 2/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 2/20
+[blend] weights blur 3/20
+[blend] weights blur 3/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 3/20
+[blend] weights blur 4/20
+[blend] weights blur 4/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 4/20
+[blend] weights blur 5/20
+[blend] weights blur 5/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 5/20
+[blend] weights blur 6/20
+[blend] weights blur 6/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 6/20
+[blend] weights blur 7/20
+[blend] weights blur 7/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 7/20
+[blend] weights blur 8/20
+[blend] weights blur 8/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 8/20
+[blend] weights blur 9/20
+[blend] weights blur 9/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 9/20
+[blend] weights blur 10/20
+[blend] weights blur 10/20
+[2026-09-27 21:21:44] [INFO] [blend] weights blur 10/20
+[blend] weights blur 11/20
+[blend] weights blur 11/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 11/20
+[blend] weights blur 12/20
+[blend] weights blur 12/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 12/20
+[blend] weights blur 13/20
+[blend] weights blur 13/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 13/20
+[blend] weights blur 14/20
+[blend] weights blur 14/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 14/20
+[blend] weights blur 15/20
+[blend] weights blur 15/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 15/20
+[blend] weights blur 16/20
+[blend] weights blur 16/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 16/20
+[blend] weights blur 17/20
+[blend] weights blur 17/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 17/20
+[blend] weights blur 18/20
+[blend] weights blur 18/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 18/20
+[blend] weights blur 19/20
+[blend] weights blur 19/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 19/20
+[blend] weights blur 20/20
+[blend] weights blur 20/20
+[2026-09-27 21:21:45] [INFO] [blend] weights blur 20/20
+[stack] 7a) weights: 1.08s
+[2026-09-27 21:21:45] [INFO] [stack] 7a) weights: 1.08s
+[blend] pyramid_blend BAŞLIYOR: N=20  325x217  levels=5  C=3
+[blend] pyramid_blend BAŞLIYOR: N=20  325x217  levels=5  C=3
+[2026-09-27 21:21:45] [INFO] [blend] pyramid_blend BAŞLIYOR: N=20  325x217  levels=5  C=3
+[blend] pyramid 1/20 başlıyor
+[blend] pyramid 1/20 başlıyor
+[2026-09-27 21:21:45] [INFO] [blend] pyramid 1/20 başlıyor
+[blend] pyramid 1/20 tamamlandı (0.3s)
+[blend] pyramid 1/20 tamamlandı (0.3s)
+[2026-09-27 21:21:45] [INFO] [blend] pyramid 1/20 tamamlandı (0.3s)
+[blend] pyramid 2/20 başlıyor
+[blend] pyramid 2/20 başlıyor
+[2026-09-27 21:21:45] [INFO] [blend] pyramid 2/20 başlıyor
+[blend] pyramid 2/20 tamamlandı (0.3s)
+[blend] pyramid 2/20 tamamlandı (0.3s)
+[2026-09-27 21:21:46] [INFO] [blend] pyramid 2/20 tamamlandı (0.3s)
+[blend] pyramid 3/20 başlıyor
+[blend] pyramid 3/20 başlıyor
+[2026-09-27 21:21:46] [INFO] [blend] pyramid 3/20 başlıyor
+[blend] pyramid 3/20 tamamlandı (0.2s)
+[blend] pyramid 3/20 tamamlandı (0.2s)
+[2026-09-27 21:21:46] [INFO] [blend] pyramid 3/20 tamamlandı (0.2s)
+[blend] pyramid 4/20 başlıyor
+[blend] pyramid 4/20 başlıyor
+[2026-09-27 21:21:46] [INFO] [blend] pyramid 4/20 başlıyor
+[blend] pyramid 4/20 tamamlandı (0.2s)
+[blend] pyramid 4/20 tamamlandı (0.2s)
+[2026-09-27 21:21:46] [INFO] [blend] pyramid 4/20 tamamlandı (0.2s)
+[blend] pyramid 5/20 başlıyor
+[blend] pyramid 5/20 başlıyor
+[2026-09-27 21:21:47] [INFO] [blend] pyramid 5/20 başlıyor
+[blend] pyramid 5/20 tamamlandı (0.2s)
+[blend] pyramid 5/20 tamamlandı (0.2s)
+[2026-09-27 21:21:47] [INFO] [blend] pyramid 5/20 tamamlandı (0.2s)
+[blend] pyramid 6/20 başlıyor
+[blend] pyramid 6/20 başlıyor
+[2026-09-27 21:21:47] [INFO] [blend] pyramid 6/20 başlıyor
+[blend] pyramid 6/20 tamamlandı (0.3s)
+[blend] pyramid 6/20 tamamlandı (0.3s)
+[2026-09-27 21:21:47] [INFO] [blend] pyramid 6/20 tamamlandı (0.3s)
+[blend] pyramid 7/20 başlıyor
+[blend] pyramid 7/20 başlıyor
+[2026-09-27 21:21:47] [INFO] [blend] pyramid 7/20 başlıyor
+[blend] pyramid 7/20 tamamlandı (0.2s)
+[blend] pyramid 7/20 tamamlandı (0.2s)
+[2026-09-27 21:21:47] [INFO] [blend] pyramid 7/20 tamamlandı (0.2s)
+[blend] pyramid 8/20 başlıyor
+[blend] pyramid 8/20 başlıyor
+[2026-09-27 21:21:48] [INFO] [blend] pyramid 8/20 başlıyor
+[blend] pyramid 8/20 tamamlandı (0.3s)
+[blend] pyramid 8/20 tamamlandı (0.3s)
+[2026-09-27 21:21:48] [INFO] [blend] pyramid 8/20 tamamlandı (0.3s)
+[blend] pyramid 9/20 başlıyor
+[blend] pyramid 9/20 başlıyor
+[2026-09-27 21:21:48] [INFO] [blend] pyramid 9/20 başlıyor
+[blend] pyramid 9/20 tamamlandı (0.3s)
+[blend] pyramid 9/20 tamamlandı (0.3s)
+[2026-09-27 21:21:48] [INFO] [blend] pyramid 9/20 tamamlandı (0.3s)
+[blend] pyramid 10/20 başlıyor
+[blend] pyramid 10/20 başlıyor
+[2026-09-27 21:21:48] [INFO] [blend] pyramid 10/20 başlıyor
+[blend] pyramid 10/20 tamamlandı (0.2s)
+[blend] pyramid 10/20 tamamlandı (0.2s)
+[2026-09-27 21:21:48] [INFO] [blend] pyramid 10/20 tamamlandı (0.2s)
+[blend] pyramid 11/20 başlıyor
+[blend] pyramid 11/20 başlıyor
+[2026-09-27 21:21:49] [INFO] [blend] pyramid 11/20 başlıyor
+[blend] pyramid 11/20 tamamlandı (0.2s)
+[blend] pyramid 11/20 tamamlandı (0.2s)
+[2026-09-27 21:21:49] [INFO] [blend] pyramid 11/20 tamamlandı (0.2s)
+[blend] pyramid 12/20 başlıyor
+[blend] pyramid 12/20 başlıyor
+[2026-09-27 21:21:49] [INFO] [blend] pyramid 12/20 başlıyor
+[blend] pyramid 12/20 tamamlandı (0.2s)
+[blend] pyramid 12/20 tamamlandı (0.2s)
+[2026-09-27 21:21:49] [INFO] [blend] pyramid 12/20 tamamlandı (0.2s)
+[blend] pyramid 13/20 başlıyor
+[blend] pyramid 13/20 başlıyor
+[2026-09-27 21:21:49] [INFO] [blend] pyramid 13/20 başlıyor
+[blend] pyramid 13/20 tamamlandı (0.2s)
+[blend] pyramid 13/20 tamamlandı (0.2s)
+[2026-09-27 21:21:49] [INFO] [blend] pyramid 13/20 tamamlandı (0.2s)
+[blend] pyramid 14/20 başlıyor
+[blend] pyramid 14/20 başlıyor
+[2026-09-27 21:21:50] [INFO] [blend] pyramid 14/20 başlıyor
+[blend] pyramid 14/20 tamamlandı (0.3s)
+[blend] pyramid 14/20 tamamlandı (0.3s)
+[2026-09-27 21:21:50] [INFO] [blend] pyramid 14/20 tamamlandı (0.3s)
+[blend] pyramid 15/20 başlıyor
+[blend] pyramid 15/20 başlıyor
+[2026-09-27 21:21:50] [INFO] [blend] pyramid 15/20 başlıyor
+[blend] pyramid 15/20 tamamlandı (0.2s)
+[blend] pyramid 15/20 tamamlandı (0.2s)
+[2026-09-27 21:21:50] [INFO] [blend] pyramid 15/20 tamamlandı (0.2s)
+[blend] pyramid 16/20 başlıyor
+[blend] pyramid 16/20 başlıyor
+[2026-09-27 21:21:50] [INFO] [blend] pyramid 16/20 başlıyor
+[blend] pyramid 16/20 tamamlandı (0.3s)
+[blend] pyramid 16/20 tamamlandı (0.3s)
+[2026-09-27 21:21:51] [INFO] [blend] pyramid 16/20 tamamlandı (0.3s)
+[blend] pyramid 17/20 başlıyor
+[blend] pyramid 17/20 başlıyor
+[2026-09-27 21:21:51] [INFO] [blend] pyramid 17/20 başlıyor
+[blend] pyramid 17/20 tamamlandı (0.2s)
+[blend] pyramid 17/20 tamamlandı (0.2s)
+[2026-09-27 21:21:51] [INFO] [blend] pyramid 17/20 tamamlandı (0.2s)
+[blend] pyramid 18/20 başlıyor
+[blend] pyramid 18/20 başlıyor
+[2026-09-27 21:21:51] [INFO] [blend] pyramid 18/20 başlıyor
+[blend] pyramid 18/20 tamamlandı (0.2s)
+[blend] pyramid 18/20 tamamlandı (0.2s)
+[2026-09-27 21:21:51] [INFO] [blend] pyramid 18/20 tamamlandı (0.2s)
+[blend] pyramid 19/20 başlıyor
+[blend] pyramid 19/20 başlıyor
+[2026-09-27 21:21:51] [INFO] [blend] pyramid 19/20 başlıyor
+[blend] pyramid 19/20 tamamlandı (0.2s)
+[blend] pyramid 19/20 tamamlandı (0.2s)
+[2026-09-27 21:21:52] [INFO] [blend] pyramid 19/20 tamamlandı (0.2s)
+[blend] pyramid 20/20 başlıyor
+[blend] pyramid 20/20 başlıyor
+[2026-09-27 21:21:52] [INFO] [blend] pyramid 20/20 başlıyor
+[blend] pyramid 20/20 tamamlandı (0.3s)
+[blend] pyramid 20/20 tamamlandı (0.3s)
+[2026-09-27 21:21:52] [INFO] [blend] pyramid 20/20 tamamlandı (0.3s)
+[blend] pyramid toplam akümülasyon: 6.9s
+[blend] pyramid toplam akümülasyon: 6.9s
+[2026-09-27 21:21:52] [INFO] [blend] pyramid toplam akümülasyon: 6.9s
+[blend] pyramid collapse başlıyor
+[blend] pyramid collapse başlıyor
+[2026-09-27 21:21:52] [INFO] [blend] pyramid collapse başlıyor
+[blend] collapse seviye 4 tamam
+[blend] collapse seviye 4 tamam
+[2026-09-27 21:21:52] [INFO] [blend] collapse seviye 4 tamam
+[blend] collapse seviye 3 tamam
+[blend] collapse seviye 3 tamam
+[2026-09-27 21:21:52] [INFO] [blend] collapse seviye 3 tamam
+[blend] collapse seviye 2 tamam
+[blend] collapse seviye 2 tamam
+[2026-09-27 21:21:52] [INFO] [blend] collapse seviye 2 tamam
+[blend] collapse seviye 1 tamam
+[blend] collapse seviye 1 tamam
+[2026-09-27 21:21:52] [INFO] [blend] collapse seviye 1 tamam
+[blend] collapse toplam: 0.2s
+[blend] collapse toplam: 0.2s
+[2026-09-27 21:21:52] [INFO] [blend] collapse toplam: 0.2s
+[stack] 7b) pyramid_blend: 7.16s
+[2026-09-27 21:21:52] [INFO] [stack] 7b) pyramid_blend: 7.16s
+[stack] 8) yazma: 0.00s  dosya=stacked_32.jpg  boyut=18.6 KB
+[2026-09-27 21:21:52] [INFO] [stack] 8) yazma: 0.00s  dosya=stacked_32.jpg  boyut=18.6 KB
+[stack] ═══ BİTİŞ: 11.50s  N=20  325x217  pyramid/8bit
+[2026-09-27 21:21:52] [INFO] [stack] ═══ BİTİŞ: 11.50s  N=20  325x217  pyramid/8bit
+[2026-09-27 21:21:52] [INFO] ✔ stack_images tamamlandı (11.5s)
+[2026-09-27 21:21:53] [INFO] ✓ Job #32 tamamlandı
+[2026-09-27 21:21:53] [INFO] --once modu bitti

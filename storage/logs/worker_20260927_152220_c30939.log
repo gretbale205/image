@@ -1,0 +1,8 @@
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+8
+[launcher] Python=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/venv/bin/python
+[launcher] Project=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image
+[launcher] exec_exit=0
+[launcher] command=cd '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image' && HOME='/home/sularkuyumculuk' PATH=/usr/local/bin:/usr/bin:/bin PYTHONUNBUFFERED=1 nohup '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/venv/bin/python' -u -m worker.worker --once > '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/storage/logs/worker_20260927_152220_c30939.log' 2>&1 & echo $! > '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/storage/worker.pid'
+

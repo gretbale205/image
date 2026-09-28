@@ -1,0 +1,19 @@
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #27 işleniyor ══
+[worker] 2 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=2  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.33s  ilk=(4608, 3456, 3)  dtype=uint8  boyutlar=[(4608, 3456)]
+[stack] 2) resize: 0.00s  hedef=3456x4608  N=2
+[stack] 3) preprocess: 1.37s
+[stack] 4) alignment: 0.40s  ref=1  mean=0.993  min=0.986
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=2  shape=(4608, 3456, 3)  dtype=uint8
+[stack] 6) focus_maps: 9.12s  focus_maps.shape=(2, 4608, 3456)  min=0.0000  max=1.0000  mean=0.1248
+[stack] 7a) weights: 1.99s
+[stack] 7b) blend_weighted: 2.03s
+[stack] 8) yazma: 0.05s  dosya=stacked_27.jpg  boyut=4104.8 KB
+[stack] ═══ BİTİŞ: 15.30s  N=2  3456x4608  softmax/8bit
+[worker] Stacking tamamlandı (15.4s)
+[worker] ✓ Job #27 tamamlandı
+[worker] --once modu bitti

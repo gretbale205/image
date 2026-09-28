@@ -1,0 +1,712 @@
+[2026-09-23 22:10:16]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #5 işleniyor ══
+[worker] 20 görüntü işlenecek
+[worker] Stacking tamamlandı (0.3s)
+[worker] ✓ Job #5 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-23 22:11:07]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #1 işleniyor ══
+[worker] 8 görüntü işlenecek
+[worker] Stacking tamamlandı (0.1s)
+[worker] ✓ Job #1 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 08:01:16]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #5 işleniyor ══
+[worker] 20 görüntü işlenecek
+[worker] Stacking tamamlandı (0.5s)
+[worker] ✓ Job #5 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 08:02:23]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-24 08:05:48]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #6 işleniyor ══
+[worker] 20 görüntü işlenecek
+[worker] Stacking tamamlandı (0.5s)
+[worker] ✓ Job #6 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 08:07:34]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #6 işleniyor ══
+[worker] 20 görüntü işlenecek
+[worker] Stacking tamamlandı (0.4s)
+[worker] ✓ Job #6 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 08:08:04]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #6 işleniyor ══
+[worker] 20 görüntü işlenecek
+[worker] Stacking tamamlandı (0.5s)
+[worker] ✓ Job #6 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 08:57:07]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 189, in _run_module_as_main
+  File "<frozen runpy>", line 112, in _get_module_details
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/__init__.py", line 24, in <module>
+    from .focus_stack import stack_images
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 23, in <module>
+    from .focus_maps import compute_focus_maps
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_maps.py", line 10, in <module>
+    from scipy import ndimage
+ModuleNotFoundError: No module named 'scipy'
+
+
+[2026-09-24 09:17:27]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 189, in _run_module_as_main
+  File "<frozen runpy>", line 112, in _get_module_details
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/__init__.py", line 24, in <module>
+    from .focus_stack import stack_images
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 23, in <module>
+    from .focus_maps import compute_focus_maps
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_maps.py", line 10, in <module>
+    from scipy import ndimage
+ModuleNotFoundError: No module named 'scipy'
+
+
+[2026-09-24 09:17:35]
+Traceback (most recent call last):
+  File "<frozen runpy>", line 189, in _run_module_as_main
+  File "<frozen runpy>", line 112, in _get_module_details
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/__init__.py", line 24, in <module>
+    from .focus_stack import stack_images
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 23, in <module>
+    from .focus_maps import compute_focus_maps
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_maps.py", line 10, in <module>
+    from scipy import ndimage
+ModuleNotFoundError: No module named 'scipy'
+
+
+[2026-09-24 09:27:27]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #7 işleniyor ══
+[worker] 20 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=20  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.03s  ilk=(217, 325, 3)  dtype=uint8  boyutlar=[(217, 325)]
+[stack] 2) resize: 0.00s  hedef=325x217  N=20
+[stack] 3) preprocess: 0.05s
+[stack] 4) alignment: 0.32s  ref=18  mean=0.953  min=0.886
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=20  shape=(217, 325, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.10s  focus_maps.shape=(20, 217, 325)  min=0.0000  max=1.0000  mean=0.0914
+[stack] 7a) weights: 0.01s  shape=(20, 217, 325)  sum~=1.000
+[stack] 7b) blend_weighted: 0.00s  result shape=(217, 325, 3)  dtype=uint8
+[stack] 8) yazma: 0.00s  dosya=stacked_7.jpg  boyut=20.6 KB
+[stack] ═══ BİTİŞ: 0.51s  N=20  325x217  softmax/8bit
+[worker] Stacking tamamlandı (0.5s)
+[worker] ✓ Job #7 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 10:11:07]
+DMap blend hatası: Unable to allocate 55.6 GiB for an array with shape (70525, 217, 325, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 239, in stack_images
+    result = blend_by_depth(aligned, depth_map, hard=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/blending.py", line 166, in blend_by_depth
+    img_lo = stack[lo_clipped.ravel()].reshape(H, W, C)
+             ~~~~~^^^^^^^^^^^^^^^^^^^^
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 55.6 GiB for an array with shape (70525, 217, 325, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 239, in stack_images
+    result = blend_by_depth(aligned, depth_map, hard=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/blending.py", line 166, in blend_by_depth
+    img_lo = stack[lo_clipped.ravel()].reshape(H, W, C)
+             ~~~~~^^^^^^^^^^^^^^^^^^^^
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 55.6 GiB for an array with shape (70525, 217, 325, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/worker.py", line 137, in process_job
+    raise Exception("Stacking başarısız")
+Exception: Stacking başarısız
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #8 işleniyor ══
+[worker] 20 görüntü işlenecek
+[worker] method=dmap  bitdepth=8
+[stack] ═══ BAŞLA: N=20  method=dmap  bitdepth=8  align=True
+[stack] 1) yükleme: 0.01s  ilk=(217, 325, 3)  dtype=uint8  boyutlar=[(217, 325)]
+[stack] 2) resize: 0.00s  hedef=325x217  N=20
+[stack] 3) preprocess: 0.03s
+[stack] 4) alignment: 0.30s  ref=18  mean=0.953  min=0.886
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=20  shape=(217, 325, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.12s  focus_maps.shape=(20, 217, 325)  min=0.0000  max=1.0000  mean=0.0914
+[stack] 7a) depth_map: 0.01s  shape=(217, 325)  min=0.02  max=19.00
+[stack] HATA dmap blend: MemoryError: Unable to allocate 55.6 GiB for an array with shape (70525, 217, 325, 3) and data type float32
+[worker] ✗ Job #8 HATA: Exception: Stacking başarısız
+[worker] --once modu bitti
+
+
+[2026-09-24 10:11:14]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-24 10:11:36]
+DMap blend hatası: Unable to allocate 55.6 GiB for an array with shape (70525, 217, 325, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 239, in stack_images
+    result = blend_by_depth(aligned, depth_map, hard=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/blending.py", line 166, in blend_by_depth
+    img_lo = stack[lo_clipped.ravel()].reshape(H, W, C)
+             ~~~~~^^^^^^^^^^^^^^^^^^^^
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 55.6 GiB for an array with shape (70525, 217, 325, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 239, in stack_images
+    result = blend_by_depth(aligned, depth_map, hard=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/blending.py", line 166, in blend_by_depth
+    img_lo = stack[lo_clipped.ravel()].reshape(H, W, C)
+             ~~~~~^^^^^^^^^^^^^^^^^^^^
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 55.6 GiB for an array with shape (70525, 217, 325, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/worker.py", line 137, in process_job
+    raise Exception("Stacking başarısız")
+Exception: Stacking başarısız
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #8 işleniyor ══
+[worker] 20 görüntü işlenecek
+[worker] method=dmap  bitdepth=8
+[stack] ═══ BAŞLA: N=20  method=dmap  bitdepth=8  align=True
+[stack] 1) yükleme: 0.01s  ilk=(217, 325, 3)  dtype=uint8  boyutlar=[(217, 325)]
+[stack] 2) resize: 0.00s  hedef=325x217  N=20
+[stack] 3) preprocess: 0.02s
+[stack] 4) alignment: 0.33s  ref=18  mean=0.953  min=0.886
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=20  shape=(217, 325, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.10s  focus_maps.shape=(20, 217, 325)  min=0.0000  max=1.0000  mean=0.0914
+[stack] 7a) depth_map: 0.01s  shape=(217, 325)  min=0.02  max=19.00
+[stack] HATA dmap blend: MemoryError: Unable to allocate 55.6 GiB for an array with shape (70525, 217, 325, 3) and data type float32
+[worker] ✗ Job #8 HATA: Exception: Stacking başarısız
+[worker] --once modu bitti
+
+
+[2026-09-24 10:12:49]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #9 işleniyor ══
+[worker] 5 görüntü işlenecek
+[worker] method=softmax  bitdepth=16
+[stack] ═══ BAŞLA: N=5  method=softmax  bitdepth=16  align=True
+[stack] 1) yükleme: 0.07s  ilk=(960, 1280, 3)  dtype=uint8  boyutlar=[(960, 1280)]
+[stack] 2) resize: 0.00s  hedef=1280x960  N=5
+[stack] 3) preprocess: 0.23s
+[stack] 4) alignment: 0.97s  ref=0  mean=0.985  min=0.969
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=5  shape=(960, 1280, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.58s  focus_maps.shape=(5, 960, 1280)  min=0.0000  max=1.0000  mean=0.0893
+[stack] 7a) weights: 0.08s  shape=(5, 960, 1280)  sum~=1.000
+[stack] 7b) blend_weighted: 0.04s  result shape=(960, 1280, 3)  dtype=uint8
+[stack] 8) yazma: 0.07s  dosya=stacked_9.png  boyut=2216.1 KB
+[stack] ═══ BİTİŞ: 2.05s  N=5  1280x960  softmax/16bit
+[worker] Stacking tamamlandı (2.1s)
+[worker] ✓ Job #9 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 10:36:58]
+DMap blend hatası: Unable to allocate 16.5 TiB for an array with shape (1228800, 960, 1280, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 239, in stack_images
+    result = blend_by_depth(aligned, depth_map, hard=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/blending.py", line 166, in blend_by_depth
+    img_lo = stack[lo_clipped.ravel()].reshape(H, W, C)
+             ~~~~~^^^^^^^^^^^^^^^^^^^^
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 16.5 TiB for an array with shape (1228800, 960, 1280, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 239, in stack_images
+    result = blend_by_depth(aligned, depth_map, hard=False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/blending.py", line 166, in blend_by_depth
+    img_lo = stack[lo_clipped.ravel()].reshape(H, W, C)
+             ~~~~~^^^^^^^^^^^^^^^^^^^^
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 16.5 TiB for an array with shape (1228800, 960, 1280, 3) and data type float32
+Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/worker.py", line 137, in process_job
+    raise Exception("Stacking başarısız")
+Exception: Stacking başarısız
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #10 işleniyor ══
+[worker] 5 görüntü işlenecek
+[worker] method=dmap  bitdepth=16
+[stack] ═══ BAŞLA: N=5  method=dmap  bitdepth=16  align=True
+[stack] 1) yükleme: 0.08s  ilk=(960, 1280, 3)  dtype=uint8  boyutlar=[(960, 1280)]
+[stack] 2) resize: 0.00s  hedef=1280x960  N=5
+[stack] 3) preprocess: 0.11s
+[stack] 4) alignment: 0.90s  ref=0  mean=0.985  min=0.969
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=5  shape=(960, 1280, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.58s  focus_maps.shape=(5, 960, 1280)  min=0.0000  max=1.0000  mean=0.0893
+[stack] 7a) depth_map: 0.03s  shape=(960, 1280)  min=0.00  max=4.00
+[stack] HATA dmap blend: MemoryError: Unable to allocate 16.5 TiB for an array with shape (1228800, 960, 1280, 3) and data type float32
+[worker] ✗ Job #10 HATA: Exception: Stacking başarısız
+[worker] --once modu bitti
+
+
+[2026-09-24 10:51:24]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-24 10:51:29]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-24 10:52:05]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #11 işleniyor ══
+[worker] 5 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=5  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.07s  ilk=(960, 1280, 3)  dtype=uint8  boyutlar=[(960, 1280)]
+[stack] 2) resize: 0.00s  hedef=1280x960  N=5
+[stack] 3) preprocess: 0.24s
+[stack] 4) alignment: 1.46s  ref=2  mean=0.995  min=0.985
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=5  shape=(960, 1280, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.47s  focus_maps.shape=(5, 960, 1280)  min=0.0000  max=1.0000  mean=0.0883
+[stack] 7a) weights: 0.21s
+[stack] 7b) blend_weighted: 0.16s
+[stack] 8) yazma: 0.00s  dosya=stacked_11.jpg  boyut=320.5 KB
+[stack] ═══ BİTİŞ: 2.61s  N=5  1280x960  softmax/8bit
+[worker] Stacking tamamlandı (2.6s)
+[worker] ✓ Job #11 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 10:52:48]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #12 işleniyor ══
+[worker] 5 görüntü işlenecek
+[worker] method=softmax  bitdepth=16
+[stack] ═══ BAŞLA: N=5  method=softmax  bitdepth=16  align=True
+[stack] 1) yükleme: 0.06s  ilk=(960, 1280, 3)  dtype=uint8  boyutlar=[(960, 1280)]
+[stack] 2) resize: 0.00s  hedef=1280x960  N=5
+[stack] 3) preprocess: 0.13s
+[stack] 4) alignment: 1.26s  ref=2  mean=0.995  min=0.985
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=5  shape=(960, 1280, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.47s  focus_maps.shape=(5, 960, 1280)  min=0.0000  max=1.0000  mean=0.0883
+[stack] 7a) weights: 0.14s
+[stack] 7b) blend_weighted: 0.13s
+[stack] 8) yazma: 0.08s  dosya=stacked_12.png  boyut=2218.0 KB
+[stack] ═══ BİTİŞ: 2.27s  N=5  1280x960  softmax/16bit
+[worker] Stacking tamamlandı (2.3s)
+[worker] ✓ Job #12 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 10:54:59]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #13 işleniyor ══
+[worker] 5 görüntü işlenecek
+[worker] method=dmap  bitdepth=8
+[stack] ═══ BAŞLA: N=5  method=dmap  bitdepth=8  align=True
+[stack] 1) yükleme: 0.06s  ilk=(960, 1280, 3)  dtype=uint8  boyutlar=[(960, 1280)]
+[stack] 2) resize: 0.00s  hedef=1280x960  N=5
+[stack] 3) preprocess: 0.11s
+[stack] 4) alignment: 1.18s  ref=2  mean=0.995  min=0.985
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=5  shape=(960, 1280, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.40s  focus_maps.shape=(5, 960, 1280)  min=0.0000  max=1.0000  mean=0.0883
+[stack] 7a) depth_map: 0.03s
+[stack] 7b) blend_by_depth: 0.24s
+[stack] 8) yazma: 0.00s  dosya=stacked_13.jpg  boyut=386.8 KB
+[stack] ═══ BİTİŞ: 2.03s  N=5  1280x960  dmap/8bit
+[worker] Stacking tamamlandı (2.0s)
+[worker] ✓ Job #13 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 10:55:37]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #14 işleniyor ══
+[worker] 5 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=5  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.07s  ilk=(960, 1280, 3)  dtype=uint8  boyutlar=[(960, 1280)]
+[stack] 2) resize: 0.00s  hedef=1280x960  N=5
+[stack] 3) preprocess: 0.12s
+[stack] 4) alignment: 1.28s  ref=2  mean=0.995  min=0.985
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=5  shape=(960, 1280, 3)  dtype=uint8
+[stack] 6) focus_maps: 0.43s  focus_maps.shape=(5, 960, 1280)  min=0.0000  max=1.0000  mean=0.0883
+[stack] 7a) weights: 0.10s
+[stack] 7b) blend_weighted: 0.10s
+[stack] 8) yazma: 0.00s  dosya=stacked_14.jpg  boyut=320.5 KB
+[stack] ═══ BİTİŞ: 2.10s  N=5  1280x960  softmax/8bit
+[worker] Stacking tamamlandı (2.1s)
+[worker] ✓ Job #14 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 12:51:50]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #15 işleniyor ══
+[worker] 6 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=6  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.73s  ilk=(3840, 2160, 3)  dtype=uint8  boyutlar=[(3840, 2160)]
+[stack] 2) resize: 0.00s  hedef=2160x3840  N=6
+[stack] 3) preprocess: 3.20s
+[stack] 4) alignment: 0.74s  ref=3  mean=0.999  min=0.997
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=6  shape=(3840, 2160, 3)  dtype=uint8
+[stack] 6) focus_maps: 9.69s  focus_maps.shape=(6, 3840, 2160)  min=0.0000  max=1.0000  mean=0.1172
+[stack] 7a) weights: 2.29s
+[stack] 7b) blend_weighted: 2.40s
+[stack] 8) yazma: 0.03s  dosya=stacked_15.jpg  boyut=1791.4 KB
+[stack] ═══ BİTİŞ: 19.10s  N=6  2160x3840  softmax/8bit
+[worker] Stacking tamamlandı (19.2s)
+[worker] ✓ Job #15 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 18:18:48]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #16 işleniyor ══
+[worker] 9 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=9  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.96s  ilk=(3840, 2160, 3)  dtype=uint8  boyutlar=[(3840, 2160)]
+[stack] 2) resize: 0.00s  hedef=2160x3840  N=9
+[stack] 3) preprocess: 4.80s
+[stack] 4) alignment: 1.58s  ref=4  mean=1.000  min=0.999
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(3840, 2160, 3)  dtype=uint8
+[stack] 6) focus_maps: 18.57s  focus_maps.shape=(9, 3840, 2160)  min=0.0000  max=1.0000  mean=0.0800
+[stack] 7a) weights: 4.27s
+[stack] 7b) blend_weighted: 4.07s
+[stack] 8) yazma: 0.02s  dosya=stacked_16.jpg  boyut=1063.0 KB
+[stack] ═══ BİTİŞ: 34.31s  N=9  2160x3840  softmax/8bit
+[worker] Stacking tamamlandı (34.5s)
+[worker] ✓ Job #16 tamamlandı
+
+[worker] ══ Job #17 işleniyor ══
+[worker] 9 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=9  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.53s  ilk=(3840, 2160, 3)  dtype=uint8  boyutlar=[(3840, 2160)]
+[stack] 2) resize: 0.00s  hedef=2160x3840  N=9
+[stack] 3) preprocess: 6.05s
+[stack] 4) alignment: 1.10s  ref=4  mean=0.997  min=0.993
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(3840, 2160, 3)  dtype=uint8
+[stack] 6) focus_maps: 14.63s  focus_maps.shape=(9, 3840, 2160)  min=0.0000  max=1.0000  mean=0.1434
+[stack] 7a) weights: 2.66s
+[stack] 7b) blend_weighted: 2.81s
+[stack] 8) yazma: 0.02s  dosya=stacked_17.jpg  boyut=1181.4 KB
+[stack] ═══ BİTİŞ: 27.82s  N=9  2160x3840  softmax/8bit
+[worker] Stacking tamamlandı (28.0s)
+[worker] ✓ Job #17 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 20:31:32]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #18 işleniyor ══
+[worker] 9 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=9  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 1.56s  ilk=(3840, 2160, 3)  dtype=uint8  boyutlar=[(3840, 2160)]
+[stack] 2) resize: 0.00s  hedef=2160x3840  N=9
+[stack] 3) preprocess: 6.72s
+[stack] 4) alignment: 1.77s  ref=4  mean=0.996  min=0.993
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(3840, 2160, 3)  dtype=uint8
+[stack] 6) focus_maps: 15.08s  focus_maps.shape=(9, 3840, 2160)  min=0.0000  max=1.0000  mean=0.2216
+[stack] 7a) weights: 3.77s
+[stack] 7b) blend_weighted: 3.50s
+[stack] 8) yazma: 0.03s  dosya=stacked_18.jpg  boyut=2127.2 KB
+[stack] ═══ BİTİŞ: 32.47s  N=9  2160x3840  softmax/8bit
+[worker] Stacking tamamlandı (32.6s)
+[worker] ✓ Job #18 tamamlandı
+
+[worker] ══ Job #19 işleniyor ══
+[worker] 9 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=9  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 2.02s  ilk=(4032, 3024, 3)  dtype=uint8  boyutlar=[(4032, 3024)]
+[stack] 2) resize: 0.00s  hedef=3024x4032  N=9
+[stack] 3) preprocess: 10.02s
+[stack] 4) alignment: 1.58s  ref=4  mean=1.000  min=0.998
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(4032, 3024, 3)  dtype=uint8
+[stack] 6) focus_maps: 32.65s  focus_maps.shape=(9, 4032, 3024)  min=0.0000  max=1.0000  mean=0.1417
+[stack] 7a) weights: 5.54s
+[stack] 7b) blend_weighted: 5.24s
+[stack] 8) yazma: 0.03s  dosya=stacked_19.jpg  boyut=1848.7 KB
+[stack] ═══ BİTİŞ: 57.15s  N=9  3024x4032  softmax/8bit
+[worker] Stacking tamamlandı (57.4s)
+[worker] ✓ Job #19 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 20:31:32]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-24 20:31:33]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-24 20:31:33]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-24 20:31:34]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-24 20:32:29]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #19 işleniyor ══
+[worker] 9 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=9  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 1.45s  ilk=(4032, 3024, 3)  dtype=uint8  boyutlar=[(4032, 3024)]
+[stack] 2) resize: 0.00s  hedef=3024x4032  N=9
+[stack] 3) preprocess: 10.58s
+[stack] 4) alignment: 1.53s  ref=4  mean=1.000  min=0.998
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(4032, 3024, 3)  dtype=uint8
+[stack] 6) focus_maps: 29.78s  focus_maps.shape=(9, 4032, 3024)  min=0.0000  max=1.0000  mean=0.1417
+[stack] 7a) weights: 6.27s
+[stack] 7b) blend_weighted: 4.36s
+[stack] 8) yazma: 0.03s  dosya=stacked_19.jpg  boyut=1848.7 KB
+[stack] ═══ BİTİŞ: 54.06s  N=9  3024x4032  softmax/8bit
+[worker] Stacking tamamlandı (54.3s)
+[worker] ✓ Job #19 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 21:12:19]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #20 işleniyor ══
+[worker] 9 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=9  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.93s  ilk=(4032, 3024, 3)  dtype=uint8  boyutlar=[(4032, 3024)]
+[stack] 2) resize: 0.00s  hedef=3024x4032  N=9
+[stack] 3) preprocess: 7.50s
+[stack] 4) alignment: 1.54s  ref=4  mean=1.000  min=1.000
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(4032, 3024, 3)  dtype=uint8
+[stack] 6) focus_maps: 31.24s  focus_maps.shape=(9, 4032, 3024)  min=0.0000  max=1.0000  mean=0.0852
+[stack] 7a) weights: 7.14s
+[stack] 7b) blend_weighted: 4.13s
+[stack] 8) yazma: 0.04s  dosya=stacked_20.jpg  boyut=2116.7 KB
+[stack] ═══ BİTİŞ: 52.58s  N=9  3024x4032  softmax/8bit
+[worker] Stacking tamamlandı (52.8s)
+[worker] ✓ Job #20 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-24 21:16:30]
+[worker] --once modu: kuyruk boşaltılıyor
+
+[worker] ══ Job #21 işleniyor ══
+[worker] 9 görüntü işlenecek
+[worker] method=softmax  bitdepth=8
+[stack] ═══ BAŞLA: N=9  method=softmax  bitdepth=8  align=True
+[stack] 1) yükleme: 0.14s  ilk=(1280, 960, 3)  dtype=uint8  boyutlar=[(1280, 960)]
+[stack] 2) resize: 0.00s  hedef=960x1280  N=9
+[stack] 3) preprocess: 0.17s
+[stack] 4) alignment: 1.35s  ref=4  mean=0.998  min=0.996
+[stack] 5) focus_input hazır: 0.00s  tip=list  N=9  shape=(1280, 960, 3)  dtype=uint8
+[stack] 6) focus_maps: 2.68s  focus_maps.shape=(9, 1280, 960)  min=0.0000  max=1.0000  mean=0.1067
+[stack] 7a) weights: 0.60s
+[stack] 7b) blend_weighted: 0.06s
+[stack] 8) yazma: 0.00s  dosya=stacked_21.jpg  boyut=412.3 KB
+[stack] ═══ BİTİŞ: 5.01s  N=9  960x1280  softmax/8bit
+[worker] Stacking tamamlandı (5.0s)
+[worker] ✓ Job #21 tamamlandı
+[worker] --once modu bitti
+
+
+[2026-09-26 13:36:39]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-26 13:37:32]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-26 13:43:26] Worker arka planda başlatıldı: worker_20260926_134326.log
+[2026-09-26 13:47:59] Worker arka planda başlatıldı: worker_20260926_134759.log
+[2026-09-26 19:50:05] Worker arka planda başlatıldı: worker_20260926_195005.log
+[2026-09-26 20:01:33] Worker arka planda başlatıldı: worker_20260926_200133.log
+[2026-09-26 20:16:30] Worker başlatıldı: worker_20260926_201630_4116.log
+[2026-09-26 20:36:01] Worker başlatıldı: worker_20260926_203601_49ac.log
+[2026-09-26 20:36:04] Worker başlatıldı: worker_20260926_203604_727e.log
+[2026-09-26 20:45:44] Worker başlatıldı: worker_20260926_204544_40db.log
+[2026-09-26 20:45:47] Worker başlatıldı: worker_20260926_204547_4bb2.log
+[2026-09-26 20:45:53] Worker başlatıldı: worker_20260926_204553_e26b.log
+[2026-09-26 20:45:53] Worker başlatıldı: worker_20260926_204553_c6a4.log
+[2026-09-26 20:45:55] Worker başlatıldı: worker_20260926_204555_17b9.log
+[2026-09-26 20:48:07] Worker başlatıldı: worker_20260926_204807_8563.log
+[2026-09-26 20:48:08] Worker başlatıldı: worker_20260926_204808_cbbd.log
+[2026-09-26 20:53:52] Worker başlatıldı: worker_20260926_205352_b524.log
+[2026-09-26 20:54:06] Worker başlatıldı: worker_20260926_205406_a11c.log
+[2026-09-26 21:18:44] Worker başlatıldı: worker_20260926_211844_56bf.log
+[2026-09-26 21:18:49] Worker başlatıldı: worker_20260926_211849_59b1.log
+[2026-09-26 21:22:23] Worker başlatıldı: worker_20260926_212223_8da9.log
+[2026-09-26 22:13:08] Worker başlatıldı: worker_20260926_221308_2a08.log
+[2026-09-26 22:15:10] Worker başlatıldı: worker_20260926_221510_10a1.log
+[2026-09-26 22:18:23] Worker başlatıldı: worker_20260926_221823_bf89.log
+[2026-09-26 22:18:34] Worker başlatıldı: worker_20260926_221834_8569.log
+[2026-09-26 22:45:57] Worker başlatıldı: worker_20260926_224557_c008.log
+[2026-09-26 22:59:06] Worker arka planda başlatıldı: worker_20260926_225906.log
+[2026-09-26 23:00:45] Worker arka planda başlatıldı: worker_20260926_230045.log
+[2026-09-26 23:10:06] Worker arka planda başlatıldı: worker_20260926_231006.log
+[2026-09-26 23:10:27] Worker arka planda başlatıldı: worker_20260926_231027.log
+[2026-09-26 23:10:40] Worker arka planda başlatıldı: worker_20260926_231040.log
+[2026-09-27 12:25:00] Worker arka planda başlatıldı: worker_20260927_122500.log
+[2026-09-27 12:58:33] Worker arka planda başlatıldı: worker_20260927_125833.log
+[2026-09-27 13:00:50] Worker arka planda başlatıldı: worker_20260927_130050.log
+[2026-09-27 13:02:10] Worker arka planda başlatıldı: worker_20260927_130210.log
+[2026-09-27 13:29:41] Worker arka planda başlatıldı: worker_20260927_132941.log
+[2026-09-27 13:29:49] Worker arka planda başlatıldı: worker_20260927_132949.log
+[2026-09-27 13:29:50] Worker arka planda başlatıldı: worker_20260927_132950.log
+[2026-09-27 13:29:52] Worker arka planda başlatıldı: worker_20260927_132952.log
+[2026-09-27 13:29:52] Worker arka planda başlatıldı: worker_20260927_132952.log
+[2026-09-27 13:29:53] Worker arka planda başlatıldı: worker_20260927_132953.log
+[2026-09-27 13:29:54] Worker arka planda başlatıldı: worker_20260927_132954.log
+[2026-09-27 13:29:54] Worker arka planda başlatıldı: worker_20260927_132954.log
+[2026-09-27 13:29:54] Worker arka planda başlatıldı: worker_20260927_132954.log
+[2026-09-27 13:29:54] Worker arka planda başlatıldı: worker_20260927_132954.log
+[2026-09-27 13:29:54] Worker arka planda başlatıldı: worker_20260927_132954.log
+[2026-09-27 13:29:54] Worker arka planda başlatıldı: worker_20260927_132954.log
+[2026-09-27 13:29:55] Worker arka planda başlatıldı: worker_20260927_132955.log
+[2026-09-27 13:29:55] Worker arka planda başlatıldı: worker_20260927_132955.log
+[2026-09-27 13:29:55] Worker arka planda başlatıldı: worker_20260927_132955.log
+[2026-09-27 13:29:55] Worker arka planda başlatıldı: worker_20260927_132955.log
+[2026-09-27 13:29:56] Worker arka planda başlatıldı: worker_20260927_132956.log
+[2026-09-27 13:33:29]
+[worker] --once modu: kuyruk boşaltılıyor
+[worker] --once modu bitti
+
+
+[2026-09-27 14:06:20] Worker arka planda başlatıldı: worker_20260927_140620_3dfd03.log PID=643774 exec_exit=0
+[2026-09-27 14:06:30] Worker arka planda başlatıldı: worker_20260927_140630_c12b0d.log PID=643793 exec_exit=0
+[2026-09-27 14:06:37] ⏳ Worker zaten çalışıyor. PID=643793
+[2026-09-27 14:07:40] Worker arka planda başlatıldı: worker_20260927_140740_4a9763.log PID=643901 exec_exit=0
+[2026-09-27 14:08:44] Worker arka planda başlatıldı: worker_20260927_140844_0277b8.log PID=643988 exec_exit=0
+[2026-09-27 14:09:03] Worker arka planda başlatıldı: worker_20260927_140903_ad554d.log PID=644221 exec_exit=0
+[2026-09-27 14:09:55] Worker arka planda başlatıldı: worker_20260927_140955_6b56f1.log PID=644432 exec_exit=0
+[2026-09-27 14:11:07] Worker arka planda başlatıldı: worker_20260927_141107_69847c.log PID=644653 exec_exit=0
+[2026-09-27 14:16:07] Worker arka planda başlatıldı: worker_20260927_141607_498234.log PID=645134 exec_exit=0
+[2026-09-27 14:16:15] ⏳ Worker zaten çalışıyor. PID=645134
+[2026-09-27 14:47:48] cancel_jobs HATA: SQLSTATE[01000]: Warning: 1265 Data truncated for column 'status' at row 1
+[2026-09-27 14:48:13] cancel_all_jobs HATA: SQLSTATE[01000]: Warning: 1265 Data truncated for column 'status' at row 1
+[2026-09-27 14:56:52] cancel_jobs: 🛑 4 iş durduruldu.
+Seçilen: 4 IDs=23,26,29,30
+[2026-09-27 14:57:19] Worker arka planda başlatıldı: worker_20260927_145719_39785f.log PID=649285 exec_exit=0
+[2026-09-27 14:57:19] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 649285
+Log: worker_20260927_145719_39785f.log
+[2026-09-27 14:57:31] Worker arka planda başlatıldı: worker_20260927_145731_3b5a4e.log PID=649312 exec_exit=0
+[2026-09-27 14:57:31] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 649312
+Log: worker_20260927_145731_3b5a4e.log
+[2026-09-27 15:02:25] Worker arka planda başlatıldı: worker_20260927_150225_c84262.log PID=650657 exec_exit=0
+[2026-09-27 15:02:25] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 650657
+Log: worker_20260927_150225_c84262.log
+[2026-09-27 15:02:27] Worker arka planda başlatıldı: worker_20260927_150227_65f163.log PID=650676 exec_exit=0
+[2026-09-27 15:02:27] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 650676
+Log: worker_20260927_150227_65f163.log
+[2026-09-27 15:02:28] ⏳ Worker zaten çalışıyor. PID=650676
+[2026-09-27 15:02:28] manual->worker: ⏳ Worker zaten çalışıyor. PID=650676
+[2026-09-27 15:02:31] Worker arka planda başlatıldı: worker_20260927_150231_c97954.log PID=650699 exec_exit=0
+[2026-09-27 15:02:31] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 650699
+Log: worker_20260927_150231_c97954.log
+[2026-09-27 15:16:08] Worker arka planda başlatıldı: worker_20260927_151608_3a9f59.log PID=652762 exec_exit=0
+[2026-09-27 15:16:08] upload->worker: ✅ Worker arka planda başlatıldı.
+PID: 652762
+Log: worker_20260927_151608_3a9f59.log
+[2026-09-27 15:22:20] Worker arka planda başlatıldı: worker_20260927_152220_c30939.log PID=653508 exec_exit=0
+[2026-09-27 15:22:20] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 653508
+Log: worker_20260927_152220_c30939.log
+[2026-09-27 15:49:25] cancel_jobs: 🛑 1 iş durduruldu.
+Seçilen: 1 IDs=31 hasCancelled=1
+[2026-09-27 15:49:32] Worker arka planda başlatıldı: worker_20260927_154932_5e31b1.log PID=656159 exec_exit=0
+[2026-09-27 15:49:32] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 656159
+Log: worker_20260927_154932_5e31b1.log
+[2026-09-27 15:49:36] ⏳ Worker zaten çalışıyor. PID=656159
+[2026-09-27 15:49:36] manual->worker: ⏳ Worker zaten çalışıyor. PID=656159
+[2026-09-27 15:51:03] cancel_jobs: 🛑 1 iş durduruldu.
+Seçilen: 1 IDs=31 hasCancelled=1
+[2026-09-27 15:51:14] Worker arka planda başlatıldı: worker_20260927_155114_6731e7.log PID=656436 exec_exit=0
+[2026-09-27 15:51:14] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 656436
+Log: worker_20260927_155114_6731e7.log
+[2026-09-27 15:51:17] ⏳ Worker zaten çalışıyor. PID=656436
+[2026-09-27 15:51:17] manual->worker: ⏳ Worker zaten çalışıyor. PID=656436
+[2026-09-27 15:55:49] cancel_jobs: 🛑 1 iş durduruldu.
+Seçilen: 1 IDs=31 hasCancelled=1
+[2026-09-27 15:55:55] Worker arka planda başlatıldı: worker_20260927_155555_1199fd.log PID=656857 exec_exit=0
+[2026-09-27 15:55:55] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 656857
+Log: worker_20260927_155555_1199fd.log
+[2026-09-27 15:55:59] ⏳ Worker zaten çalışıyor. PID=656857
+[2026-09-27 15:55:59] manual->worker: ⏳ Worker zaten çalışıyor. PID=656857
+[2026-09-27 17:33:31] Worker arka planda başlatıldı: worker_20260927_173331_d1a8c3.log PID=669049 exec_exit=0
+[2026-09-27 17:33:31] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 669049
+Log: worker_20260927_173331_d1a8c3.log
+[2026-09-27 17:33:33] ⏳ Worker zaten çalışıyor. PID=669049
+[2026-09-27 17:33:33] manual->worker: ⏳ Worker zaten çalışıyor. PID=669049
+[2026-09-27 17:41:47] Worker arka planda başlatıldı: worker_20260927_174147_a3fb02.log PID=670110 exec_exit=0
+[2026-09-27 17:41:47] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 670110
+Log: worker_20260927_174147_a3fb02.log
+[2026-09-27 17:41:49] ⏳ Worker zaten çalışıyor. PID=670110
+[2026-09-27 17:41:49] manual->worker: ⏳ Worker zaten çalışıyor. PID=670110
+[2026-09-27 18:21:40] Worker arka planda başlatıldı: worker_20260927_182140_729b91.log PID=675458 exec_exit=0
+[2026-09-27 18:21:40] upload->worker: ✅ Worker arka planda başlatıldı.
+PID: 675458
+Log: worker_20260927_182140_729b91.log
+[2026-09-27 22:04:25] Worker arka planda başlatıldı: worker_20260927_220425_317a83.log PID=701752 exec_exit=0
+[2026-09-27 22:04:25] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 701752
+Log: worker_20260927_220425_317a83.log
+[2026-09-27 22:04:28] ⏳ Worker zaten çalışıyor. PID=701752
+[2026-09-27 22:04:28] manual->worker: ⏳ Worker zaten çalışıyor. PID=701752
