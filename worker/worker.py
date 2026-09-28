@@ -10,7 +10,12 @@ v3.2:
   - Method başına ayrı ayar
   - Progress callback → DB'ye aşama aşama yüzde
   - İptal edilen iş 'cancelled' kalır, hata olsa bile 'failed'e çevrilmez
+
+v3.3:
+  - Çıkışta worker.pid otomatik temizlenir (atexit + finally)
+  - SIGKILL hariç tüm çıkışlarda temizlik garanti
 """
+import atexit
 import os
 import signal
 import sys
@@ -111,6 +116,61 @@ def _sig(sig, frame):
 
 signal.signal(signal.SIGINT, _sig)
 signal.signal(signal.SIGTERM, _sig)
+
+
+# ============================================================
+# PID DOSYASI TEMİZLİĞİ
+# ============================================================
+def _cleanup_pid_file():
+    """
+    Çıkışta storage/worker.pid dosyasını sil — SADECE bu PID'e aitse.
+    Başka bir worker zaten başlamışsa dokunmaz.
+    """
+    try:
+        pid_file = Path("storage/worker.pid")
+        if not pid_file.exists():
+            return
+
+        try:
+            content = pid_file.read_text(encoding="utf-8").strip()
+            current_pid = int(content) if content else 0
+        except Exception:
+            current_pid = 0
+
+        if current_pid == os.getpid():
+            try:
+                pid_file.unlink()
+                _log(f"[cleanup] worker.pid temizlendi (PID={os.getpid()})")
+            except Exception as e:
+                _log(f"[cleanup] worker.pid silinemedi: {e}", "WARN")
+        else:
+            _log(f"[cleanup] worker.pid başka PID'e ait "
+                 f"({current_pid}), dokunulmadı", "WARN")
+
+    except Exception as e:
+        try:
+            _log(f"[cleanup] PID temizleme hatası: {e}", "WARN")
+        except Exception:
+            pass
+
+
+def _close_log_handle():
+    """Log dosyasını düzgün kapat (buffer flush)."""
+    global _LOG_HANDLE
+    if _LOG_HANDLE is not None:
+        try:
+            _LOG_HANDLE.flush()
+            _LOG_HANDLE.close()
+        except Exception:
+            pass
+        _LOG_HANDLE = None
+
+
+# atexit: normal + exception + sys.exit() çıkışlarında çalışır.
+# (SIGTERM/SIGINT sinyalleri → signal handler RUNNING=False yapar →
+#  main döngü kırılır → main biter → atexit devreye girer.)
+atexit.register(_cleanup_pid_file)
+atexit.register(_close_log_handle)
 
 
 # ============================================================
@@ -399,7 +459,15 @@ if __name__ == "__main__":
             run_once()
         else:
             run_forever()
+    except KeyboardInterrupt:
+        _log("KeyboardInterrupt — kapatılıyor", "WARN")
     except Exception as e:
         _log(f"FATAL: {type(e).__name__}: {e}", "ERROR")
         _log(traceback.format_exc(), "ERROR")
         raise
+    finally:
+        # atexit zaten kayıtlı ama burada da garantiye alıyoruz;
+        # idempotent olduğu için iki kez çağrılması sorun değil.
+        _cleanup_pid_file()
+        _log("[worker] kapanıyor")
+        _close_log_handle()

@@ -710,3 +710,111 @@ PID: 701752
 Log: worker_20260927_220425_317a83.log
 [2026-09-27 22:04:28] ⏳ Worker zaten çalışıyor. PID=701752
 [2026-09-27 22:04:28] manual->worker: ⏳ Worker zaten çalışıyor. PID=701752
+[2026-09-28 02:00:44] Worker arka planda başlatıldı: worker_20260928_020044_d0b45d.log PID=731601 exec_exit=0
+[2026-09-28 02:00:44] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 731601
+Log: worker_20260928_020044_d0b45d.log
+[2026-09-28 02:00:48] ⏳ Worker zaten çalışıyor. PID=731601
+[2026-09-28 02:00:48] manual->worker: ⏳ Worker zaten çalışıyor. PID=731601
+[2026-09-28 02:06:55] cancel_jobs: 🛑 1 iş durduruldu.
+Seçilen: 1 IDs=29 hasCancelled=1
+[2026-09-28 02:09:40] Worker arka planda başlatıldı: worker_20260928_020940_fdeb6c.log PID=733546 exec_exit=0
+[2026-09-28 02:09:40] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 733546
+Log: worker_20260928_020940_fdeb6c.log
+[2026-09-28 02:09:42] ⏳ Worker zaten çalışıyor. PID=733546
+[2026-09-28 02:09:42] manual->worker: ⏳ Worker zaten çalışıyor. PID=733546
+[2026-09-28 02:26:33] Worker arka planda başlatıldı: worker_20260928_022633_e64334.log PID=735304 exec_exit=0
+[2026-09-28 02:26:33] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 735304
+Log: worker_20260928_022633_e64334.log
+[2026-09-28 02:26:35] ⏳ Worker zaten çalışıyor. PID=735304
+[2026-09-28 02:26:35] manual->worker: ⏳ Worker zaten çalışıyor. PID=735304
+[2026-09-28 02:31:41] Worker arka planda başlatıldı: worker_20260928_023141_f19480.log PID=735836 exec_exit=0
+[2026-09-28 02:31:41] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 735836
+Log: worker_20260928_023141_f19480.log
+[2026-09-28 02:31:43] Worker arka planda başlatıldı: worker_20260928_023143_176b23.log PID=735851 exec_exit=0
+[2026-09-28 02:31:43] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 735851
+Log: worker_20260928_023143_176b23.log
+[2026-09-28 02:31:52] Worker arka planda başlatıldı: worker_20260928_023152_13dd95.log PID=735889 exec_exit=0
+[2026-09-28 02:31:52] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 735889
+Log: worker_20260928_023152_13dd95.log
+[2026-09-28 02:31:54] Worker arka planda başlatıldı: worker_20260928_023154_3fdf6e.log PID=735912 exec_exit=0
+[2026-09-28 02:31:54] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 735912
+Log: worker_20260928_023154_3fdf6e.log
+[2026-09-28 02:32:10] Worker arka planda başlatıldı: worker_20260928_023210_169fa1.log PID=735976 exec_exit=0
+[2026-09-28 02:32:10] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 735976
+Log: worker_20260928_023210_169fa1.log
+[2026-09-28 02:32:27] cancel_jobs: 🛑 1 iş durduruldu.
+Seçilen: 1 IDs=25 hasCancelled=1
+[2026-09-28 02:32:39] Worker arka planda başlatıldı: worker_20260928_023239_1725f3.log PID=736022 exec_exit=0
+[2026-09-28 02:32:39] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 736022
+Log: worker_20260928_023239_1725f3.log
+[2026-09-28 02:32:43] Worker arka planda başlatıldı: worker_20260928_023243_a11137.log PID=736038 exec_exit=0
+[2026-09-28 02:32:43] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 736038
+Log: worker_20260928_023243_a11137.log
+[2026-09-28 02:32:45] Worker arka planda başlatıldı: worker_20260928_023245_efef39.log PID=736053 exec_exit=0
+[2026-09-28 02:32:45] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 736053
+Log: worker_20260928_023245_efef39.log
+[2026-09-28 02:33:17] cancel_jobs: 🛑 1 iş durduruldu.
+Seçilen: 1 IDs=24 hasCancelled=1
+[2026-09-28 02:33:22] Worker arka planda başlatıldı: worker_20260928_023322_c335d6.log PID=736130 exec_exit=0
+[2026-09-28 02:33:22] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 736130
+Log: worker_20260928_023322_c335d6.log
+[2026-09-28 02:33:25] Worker arka planda başlatıldı: worker_20260928_023325_5c03d1.log PID=736145 exec_exit=0
+[2026-09-28 02:33:25] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 736145
+Log: worker_20260928_023325_5c03d1.log
+[2026-09-28 02:33:26] ⏳ Worker zaten çalışıyor. PID=736145
+[2026-09-28 02:33:26] manual->worker: ⏳ Worker zaten çalışıyor. PID=736145
+[2026-09-28 02:33:30] cancel_jobs: 🛑 1 iş durduruldu.
+Seçilen: 1 IDs=24 hasCancelled=1
+[2026-09-28 02:34:35] Worker arka planda başlatıldı: worker_20260928_023435_27eaa6.log PID=736253 exec_exit=0
+[2026-09-28 02:34:35] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 736253
+Log: worker_20260928_023435_27eaa6.log
+[2026-09-28 06:30:51] Worker arka planda başlatıldı: worker_20260928_063051_61303c.log PID=785910 exec_exit=0
+[2026-09-28 06:30:51] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 785910
+Log: worker_20260928_063051_61303c.log
+[2026-09-28 06:30:54] ⏳ Worker zaten çalışıyor. PID=785910
+[2026-09-28 06:30:54] manual->worker: ⏳ Worker zaten çalışıyor. PID=785910
+[2026-09-28 07:19:16] Worker arka planda başlatıldı: worker_20260928_071916_e523ce.log PID=803429 exec_exit=0
+[2026-09-28 07:19:16] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 803429
+Log: worker_20260928_071916_e523ce.log
+[2026-09-28 07:19:19] Worker arka planda başlatıldı: worker_20260928_071919_c9efc6.log PID=803454 exec_exit=0
+[2026-09-28 07:19:19] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 803454
+Log: worker_20260928_071919_c9efc6.log
+[2026-09-28 07:19:49] Worker arka planda başlatıldı: worker_20260928_071949_1e999a.log PID=803632 exec_exit=0
+[2026-09-28 07:19:49] manual->worker: ✅ Worker arka planda başlatıldı.
+PID: 803632
+Log: worker_20260928_071949_1e999a.log
+[2026-09-28 08:49:04] Worker arka planda başlatıldı: worker_20260928_084904_b1b15f.log PID=832859 exec_exit=0
+[2026-09-28 08:49:04] upload->worker: ✅ Worker arka planda başlatıldı.
+PID: 832859
+Log: worker_20260928_084904_b1b15f.log
+[2026-09-28 08:49:08] ⏳ Worker zaten çalışıyor. PID=832859
+[2026-09-28 08:49:08] manual->worker: ⏳ Worker zaten çalışıyor. PID=832859
+[2026-09-28 09:12:38] Worker arka planda başlatıldı: worker_20260928_091238_289ff2.log PID=839226 exec_exit=0
+[2026-09-28 09:12:38] retry->worker: ✅ Worker arka planda başlatıldı.
+PID: 839226
+Log: worker_20260928_091238_289ff2.log
+[2026-09-28 09:12:40] ⏳ Worker zaten çalışıyor. PID=839226
+[2026-09-28 09:12:40] manual->worker: ⏳ Worker zaten çalışıyor. PID=839226
+[2026-09-28 09:30:16] Worker arka planda başlatıldı: worker_20260928_093016_5ab72f.log PID=842723 exec_exit=0
+[2026-09-28 09:30:16] upload->worker: ✅ Worker arka planda başlatıldı.
+PID: 842723
+Log: worker_20260928_093016_5ab72f.log
+[2026-09-28 09:30:21] ⏳ Worker zaten çalışıyor. PID=842723
+[2026-09-28 09:30:21] manual->worker: ⏳ Worker zaten çalışıyor. PID=842723

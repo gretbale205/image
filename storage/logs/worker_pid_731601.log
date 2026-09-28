@@ -1,0 +1,24 @@
+[2026-09-28 05:00:45] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_731601.log
+[2026-09-28 05:00:45] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=731601
+[2026-09-28 05:00:45] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-28 05:00:45] [INFO] ══ Job #29 işleniyor ══
+[2026-09-28 05:00:45] [INFO] 9 görüntü işlenecek
+[2026-09-28 05:00:45] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-28 05:00:45] [INFO] ▶ stack_images başlıyor
+[2026-09-28 05:00:45] [INFO] [stack] START N=9 method=pyramid quality=balanced bit=8 align=True
+[2026-09-28 05:00:47] [INFO] [stack] load 1.58s shape=(4608, 3456, 3) dtype=uint8
+[2026-09-28 05:00:47] [INFO] [stack] resize 0.00s -> 3456x4608
+[2026-09-28 05:00:58] [INFO] [stack] preprocess 11.08s
+[2026-09-28 05:01:00] [INFO] [stack] alignment 2.05s ref=4 mean=0.9626 min=0.8608
+[2026-09-28 05:01:01] [INFO] [focus_maps] engine start: N=9 3456x4608
+[2026-09-28 05:01:05] [INFO] [focus_maps] 1/9 done (4.33s)
+[2026-09-28 05:01:09] [INFO] [focus_maps] 2/9 done (3.86s)
+[2026-09-28 05:01:12] [INFO] [focus_maps] 3/9 done (3.28s)
+[2026-09-28 05:01:16] [INFO] [focus_maps] 4/9 done (3.48s)
+[2026-09-28 05:01:19] [INFO] [focus_maps] 5/9 done (2.99s)
+[2026-09-28 05:01:22] [INFO] [focus_maps] 6/9 done (2.83s)
+[2026-09-28 05:01:25] [INFO] [focus_maps] 7/9 done (3.06s)
+[2026-09-28 05:01:28] [INFO] [focus_maps] 8/9 done (2.98s)
+[2026-09-28 05:01:32] [INFO] [focus_maps] 9/9 done (3.52s)
+[2026-09-28 05:01:32] [INFO] [focus_maps] done in 31.48s range=0.0000..1.0000
+[2026-09-28 05:01:32] [INFO] [stack] focus maps 31.56s

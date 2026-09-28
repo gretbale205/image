@@ -1,0 +1,6 @@
+[2026-09-28 05:33:23] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_736130.log
+[2026-09-28 05:33:23] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=736130
+[2026-09-28 05:33:23] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-28 05:33:23] [INFO] --once modu bitti
+htdocs/www.sularkuyumculuk.com/pro/image' && HOME='/home/sularkuyumculuk' PATH=/usr/local/bin:/usr/bin:/bin PYTHONUNBUFFERED=1 nohup '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/venv/bin/python' -u -m worker.worker --once > '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/storage/logs/worker_20260928_023322_c335d6.log' 2>&1 & echo $! > '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/storage/worker.pid'
+

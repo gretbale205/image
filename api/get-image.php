@@ -1,202 +1,179 @@
 <?php
 /**
- * get-image.php
- * Focus Stacking - Job'a ait görüntüyü güvenli şekilde sunar.
- *
- * GET parametreleri:
- *   - job_id : int (zorunlu)
- *   - role   : source | preview | master | web  (varsayılan: preview)
- *
- * Yanıt:
- *   - 200 : image binary
- *   - 400 : { success:false, error:"..." }
- *   - 404 : { success:false, error:"..." }
- *   - 415 : { success:false, error:"..." }
- *   - 500 : { success:false, error:"..." }
+ * get-image.php — v2 (self-contained)
+ * index.php ile aynı .env / aynı STORAGE_ROOT kullanır.
  */
+error_reporting(0);
+ini_set('display_errors', '0');
 
-// ============================================================
-// BAĞIMLILIKLAR
-// ============================================================
-try {
-    require_once __DIR__ . '/../app/helpers.php';
-    require_once __DIR__ . '/../app/db.php';
-} catch (Throwable $e) {
-    http_response_code(500);
-    header('Content-Type: application/json; charset=utf-8');
-    error_log('[get-image] Bağımlılık: ' . $e->getMessage());
-    echo json_encode(['success' => false, 'error' => 'Sunucu yapılandırma hatası.']);
-    exit;
+// Çıktı tamponlarını temizle (BOM/boşluk varsa görsel bozulmasın)
+while (ob_get_level() > 0) { ob_end_clean(); }
+
+// ---------- .ENV (index.php ile aynı yükleyici) ----------
+function load_env(string $path): void {
+    if (!is_readable($path)) return;
+    foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#' || strpos($line, '=') === false) continue;
+        [$k, $v] = explode('=', $line, 2);
+        $k = trim($k); $v = trim($v, " \t\"'");
+        if ($k !== '' && getenv($k) === false) { putenv("$k=$v"); $_ENV[$k] = $v; }
+    }
+}
+load_env(__DIR__ . '/../.env');
+
+function env(string $k, string $d=''): string { $v = getenv($k); return ($v===false||$v==='') ? $d : $v; }
+function env_int(string $k, int $d): int { $v = getenv($k); return ($v===false||$v==='') ? $d : (int)$v; }
+
+// ---------- AYARLAR (index.php ile aynı) ----------
+$STORAGE_ROOT = env('STORAGE_ROOT', dirname(__DIR__) . '/storage');
+
+// ---------- DB ----------
+function img_db() {
+    static $pdo = null;
+    if ($pdo === null) {
+        $pdo = new PDO(
+            'mysql:host=' . env('DB_HOST','localhost')
+                . ';port=' . env_int('DB_PORT', 3306)
+                . ';dbname=' . env('DB_NAME','focusstack')
+                . ';charset=utf8mb4',
+            env('DB_USER',''),
+            env('DB_PASS',''),
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+    }
+    return $pdo;
 }
 
-// ============================================================
-// YARDIMCI: hata dönüşü (JSON + nosniff)
-// ============================================================
-function image_error(int $status, string $message): void {
+// ---------- Hata dönüşü ----------
+function img_error(int $status, string $msg): void {
+    while (ob_get_level() > 0) { ob_end_clean(); }
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('X-Content-Type-Options: nosniff');
-    echo json_encode(['success' => false, 'error' => $message]);
+    echo json_encode(['success' => false, 'error' => $msg], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-// ============================================================
-// 1) Parametre doğrulama
-// ============================================================
-$jobIdRaw = $_GET['job_id'] ?? null;
-$roleRaw  = $_GET['role']   ?? 'preview';
+// ---------- Parametreler ----------
+$jobIdRaw  = $_GET['job_id']  ?? null;
+$roleRaw   = $_GET['role']    ?? 'preview';
+$fileIdRaw = $_GET['file_id'] ?? null;
 
-// Array/obje enjeksiyonuna karşı (örn. ?job_id[]=1)
-if (!is_scalar($jobIdRaw) || !is_scalar($roleRaw)) {
-    image_error(400, 'Geçersiz parametre');
+if (!is_scalar($jobIdRaw) || !is_scalar($roleRaw)
+    || ($fileIdRaw !== null && !is_scalar($fileIdRaw))) {
+    img_error(400, 'Geçersiz parametre');
 }
 
-$jobId = (int) $jobIdRaw;
-$role  = trim((string) $roleRaw);
+$jobId = (int)$jobIdRaw;
+$role  = trim((string)$roleRaw);
+if ($jobId <= 0) img_error(400, 'Geçersiz job_id');
 
-if ($jobId <= 0) {
-    image_error(400, 'Geçersiz job_id');
+$fileId = 0;
+if ($fileIdRaw !== null && $fileIdRaw !== '') {
+    $fileId = (int)$fileIdRaw;
+    if ($fileId <= 0) img_error(400, 'Geçersiz file_id');
 }
 
-// Enum whitelist — DB şemasıyla senkron
 $allowedRoles = ['source', 'preview', 'master', 'web'];
-if (!in_array($role, $allowedRoles, true)) {
-    image_error(400, 'Geçersiz role');
-}
+if (!in_array($role, $allowedRoles, true)) img_error(400, 'Geçersiz role');
 
-// ============================================================
-// 2) STORAGE_PATH kontrolü
-// ============================================================
-if (!defined('STORAGE_PATH')) {
-    error_log('[get-image] STORAGE_PATH tanımlı değil');
-    image_error(500, 'Sunucu yapılandırma hatası.');
-}
-
-$storageRoot = realpath(STORAGE_PATH);
-if ($storageRoot === false) {
-    error_log('[get-image] STORAGE_PATH realpath başarısız: ' . STORAGE_PATH);
-    image_error(500, 'Sunucu yapılandırma hatası.');
-}
-$storageRoot = rtrim($storageRoot, DIRECTORY_SEPARATOR);
-
-// ============================================================
-// 3) DB'den yolu al
-// ============================================================
+// ---------- DB'den yolu al ----------
 try {
-    $db = getDB();
-    $stmt = $db->prepare(
-        "SELECT path FROM job_files
-         WHERE job_id = ? AND role = ?
-         ORDER BY id DESC LIMIT 1"
-    );
-    $stmt->execute([$jobId, $role]);
-    $file = $stmt->fetch();
+    $db = img_db();
+    if ($fileId > 0) {
+        $stmt = $db->prepare(
+            "SELECT path FROM job_files
+             WHERE id = ? AND job_id = ? AND role = ?
+             LIMIT 1"
+        );
+        $stmt->execute([$fileId, $jobId, $role]);
+    } else {
+        $stmt = $db->prepare(
+            "SELECT path FROM job_files
+             WHERE job_id = ? AND role = ?
+             ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute([$jobId, $role]);
+    }
+    $file = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
     error_log('[get-image] DB: ' . $e->getMessage());
-    image_error(500, 'Sunucu hatası.');
+    img_error(500, 'Sunucu hatası (DB).');
 }
 
 if (!$file || empty($file['path'])) {
-    image_error(404, 'Görsel bulunamadı');
+    img_error(404, 'Görsel kaydı bulunamadı');
 }
 
-// ============================================================
-// 4) Storage sandbox — path traversal savunması
-// ============================================================
-$realPath = realpath($file['path']);
-if ($realPath === false) {
-    // Dosya disk'ten silinmiş veya yol bozuk
-    error_log('[get-image] realpath başarısız: ' . $file['path']);
-    image_error(404, 'Görsel bulunamadı');
+$dbPath = $file['path'];
+
+// Mutlak yol mu? Değilse STORAGE_ROOT'a göre çöz.
+if ($dbPath[0] !== '/' && !preg_match('/^[A-Za-z]:[\\\\\/]/', $dbPath)) {
+    // Relative path - proje köküne göre
+    $dbPath = dirname(__DIR__) . '/' . ltrim($dbPath, '/\\');
 }
 
-// STORAGE_PATH altında mı? (strncmp = PHP 7.4 uyumlu)
-$prefix = $storageRoot . DIRECTORY_SEPARATOR;
-if (strncmp($realPath, $prefix, strlen($prefix)) !== 0) {
-    error_log('[get-image] Sandbox ihlali! job_id=' . $jobId
+$realPath = realpath($dbPath);
+if ($realPath === false || !is_file($realPath)) {
+    error_log('[get-image] Dosya yok. job_id=' . $jobId
               . ' role=' . $role
-              . ' resolved=' . $realPath
-              . ' root=' . $storageRoot);
-    image_error(403, 'Erişim reddedildi');
+              . ' db_path=' . $file['path']
+              . ' tried=' . $dbPath);
+    img_error(404, 'Görsel diskte bulunamadı');
 }
 
-if (!is_file($realPath) || !is_readable($realPath)) {
-    image_error(404, 'Görsel bulunamadı');
+// ---------- Sandbox kontrolü (yumuşak) ----------
+$storageReal = realpath($STORAGE_ROOT);
+$inSandbox = true;
+if ($storageReal !== false) {
+    $prefix = rtrim($storageReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    if (strncmp($realPath, $prefix, strlen($prefix)) !== 0) {
+        $inSandbox = false;
+    }
 }
 
-// ============================================================
-// 5) MIME tespiti (finfo + extension fallback)
-// ============================================================
+if (!$inSandbox) {
+    error_log('[get-image] SANDBOX DIŞI: ' . $realPath
+              . ' root=' . $storageReal);
+    img_error(403, 'Erişim reddedildi');
+}
+
+if (!is_readable($realPath)) {
+    img_error(403, 'Dosya okunamıyor (izin)');
+}
+
+// ---------- MIME ----------
 $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
-
-// Uzantıdan beklenen MIME (fallback)
 $extMimeMap = [
-    'jpg'  => 'image/jpeg',
-    'jpeg' => 'image/jpeg',
-    'png'  => 'image/png',
-    'webp' => 'image/webp',
-    'tif'  => 'image/tiff',
-    'tiff' => 'image/tiff',
-    'bmp'  => 'image/bmp',
+    'jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png',
+    'webp'=>'image/webp','tif'=>'image/tiff','tiff'=>'image/tiff','bmp'=>'image/bmp',
 ];
+if (!isset($extMimeMap[$ext])) img_error(415, 'Desteklenmeyen tür');
 
-if (!isset($extMimeMap[$ext])) {
-    image_error(415, 'Desteklenmeyen görüntü türü');
-}
-
-// finfo ile gerçek içerik türünü tespit et
-$detectedMime = null;
+$serveMime = $extMimeMap[$ext];
 if (function_exists('finfo_open')) {
     $fi = finfo_open(FILEINFO_MIME_TYPE);
     if ($fi !== false) {
-        $m = finfo_file($fi, $realPath);
+        $m = @finfo_file($fi, $realPath);
         finfo_close($fi);
-        if (is_string($m) && $m !== '') {
-            $detectedMime = strtolower($m);
+        if (is_string($m) && strpos($m, 'image/') === 0) {
+            $serveMime = $m;
         }
     }
 }
 
-// İzin verilen görüntü MIME'leri
-$allowedImageMimes = [
-    'image/jpeg',
-    'image/png',
-    'image/webp',
-    'image/tiff',
-    'image/bmp',
-    'image/x-ms-bmp',   // bazı sistemler BMP için bunu döner
-];
-
-$serveMime = null;
-if ($detectedMime !== null && in_array($detectedMime, $allowedImageMimes, true)) {
-    // finfo doğru bir görüntü türü döndürdüyse onu kullan
-    $serveMime = $detectedMime;
-} elseif ($detectedMime === null) {
-    // finfo yok/başarısız → uzantıya güven
-    $serveMime = $extMimeMap[$ext];
-} else {
-    // finfo "image/*" olmayan bir şey döndürdü (örn. text/html) → reddet
-    error_log('[get-image] MIME uyuşmazlığı: ext=' . $ext
-              . ' detected=' . $detectedMime
-              . ' path=' . $realPath);
-    image_error(415, 'Görüntü içeriği doğrulanamadı');
-}
-
-// ============================================================
-// 6) Yanıt başlıkları + gövde
-// ============================================================
+// ---------- Yanıt ----------
 $filesize = filesize($realPath);
-if ($filesize === false) {
-    image_error(500, 'Dosya okunamadı');
+if ($filesize === false || $filesize === 0) {
+    img_error(500, 'Dosya boyutu okunamadı');
 }
 
 header('Content-Type: ' . $serveMime);
 header('Content-Length: ' . $filesize);
 header('X-Content-Type-Options: nosniff');
-header('Cache-Control: private, max-age=0, must-revalidate');
-header('Pragma: no-cache');
+header('Cache-Control: private, max-age=300');
 
-// Koşullu istek desteği (tarayıcı cache'i için)
 $etag = '"' . md5($realPath . '|' . $filesize . '|' . filemtime($realPath)) . '"';
 header('ETag: ' . $etag);
 header('Last-Modified: ' . gmdate('D, d M Y H:i:s', filemtime($realPath)) . ' GMT');
@@ -206,8 +183,6 @@ if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']
     exit;
 }
 
-// Çıktı tamponunu kapat (büyük dosyalar için)
 while (ob_get_level() > 0) { ob_end_clean(); }
-
 readfile($realPath);
 exit;

@@ -1,0 +1,30 @@
+[2026-09-28 12:30:16] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_842723.log
+[2026-09-28 12:30:16] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=842723
+[2026-09-28 12:30:16] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-28 12:30:16] [INFO] ══ Job #34 işleniyor ══
+[2026-09-28 12:30:17] [INFO] 7 görüntü işlenecek
+[2026-09-28 12:30:17] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-28 12:30:17] [INFO] ▶ stack_images başlıyor
+[2026-09-28 12:30:17] [INFO] [stack] START N=7 method=pyramid quality=balanced
+[2026-09-28 12:30:26] [INFO] [stack] alignment scores: ['0.986', '1.000', '0.954', '1.000', '0.992', '0.999', '0.974']
+[2026-09-28 12:30:26] [INFO] [focus_maps] n=7 size=3456x4608 weights(sml=0.35,tng=0.20,var=0.15,ent=0.15,lap=0.15)
+[2026-09-28 12:31:23] [INFO] [focus_maps] global normalization...
+[2026-09-28 12:31:31] [INFO] [focus_maps] frame 0: mean=0.0942 max=1.0000 nonzero=49.2%
+[2026-09-28 12:31:31] [INFO] [focus_maps] frame 1: mean=0.1380 max=1.0000 nonzero=87.8%
+[2026-09-28 12:31:31] [INFO] [focus_maps] frame 2: mean=0.1841 max=1.0000 nonzero=79.2%
+[2026-09-28 12:31:31] [INFO] [focus_maps] frame 3: mean=0.1612 max=1.0000 nonzero=96.4%
+[2026-09-28 12:31:31] [INFO] [focus_maps] frame 4: mean=0.1608 max=1.0000 nonzero=86.9%
+[2026-09-28 12:31:31] [INFO] [focus_maps] frame 5: mean=0.1537 max=1.0000 nonzero=90.0%
+[2026-09-28 12:31:31] [INFO] [focus_maps] frame 6: mean=0.1752 max=1.0000 nonzero=82.1%
+[2026-09-28 12:31:38] [INFO] [weights] frame 0: mean=0.137 max=1.000 >0.5_ratio=0.2%
+[2026-09-28 12:31:38] [INFO] [weights] frame 1: mean=0.138 max=0.967 >0.5_ratio=0.0%
+[2026-09-28 12:31:38] [INFO] [weights] frame 2: mean=0.155 max=0.999 >0.5_ratio=0.8%
+[2026-09-28 12:31:38] [INFO] [weights] frame 3: mean=0.139 max=0.945 >0.5_ratio=0.0%
+[2026-09-28 12:31:38] [INFO] [weights] frame 4: mean=0.143 max=0.987 >0.5_ratio=0.2%
+[2026-09-28 12:31:38] [INFO] [weights] frame 5: mean=0.140 max=0.807 >0.5_ratio=0.0%
+[2026-09-28 12:31:38] [INFO] [weights] frame 6: mean=0.148 max=0.994 >0.5_ratio=0.2%
+[2026-09-28 12:31:38] [INFO] [pyramid] levels=7 size=3456x4608 n=7
+[2026-09-28 12:31:55] [INFO] [stacking] frames=7 resolution=3456x4608 method=pyramid align_mean=0.986 align_min=0.954 time=98.61s peak_ram=0MB
+[2026-09-28 12:31:55] [INFO] ✔ stack_images tamamlandı (98.7s)
+[2026-09-28 12:31:56] [INFO] ✓ Job #34 tamamlandı
+[2026-09-28 12:31:56] [INFO] --once modu bitti

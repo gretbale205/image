@@ -1,0 +1,11 @@
+[2026-09-28 05:34:35] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_736253.log
+[2026-09-28 05:34:35] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=736253
+[2026-09-28 05:34:35] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-28 05:34:35] [INFO] ══ Job #24 işleniyor ══
+[2026-09-28 05:34:35] [INFO] 9 görüntü işlenecek
+[2026-09-28 05:34:35] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-28 05:34:35] [INFO] ▶ stack_images başlıyor
+[2026-09-28 05:34:35] [INFO] [stack] START N=9 method=pyramid quality=balanced
+[2026-09-28 05:35:57] [INFO] ✔ stack_images tamamlandı (81.9s)
+[2026-09-28 05:35:58] [INFO] ✓ Job #24 tamamlandı
+[2026-09-28 05:35:58] [INFO] --once modu bitti

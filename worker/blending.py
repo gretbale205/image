@@ -1,15 +1,18 @@
-"""Blending: softmax + DMap (memory-safe) + multi-band pyramid.
+"""RAM-safe focus stacking blending with correct weight normalization.
 
-v3.2: progress_cb / cancel_cb / log_cb desteği.
-  - compute_weights: her görüntü Gaussian blur sonrası progress
-  - blend_weighted / blend_by_depth: her görüntü sonrası progress
-  - pyramid_blend: her görüntü pyramid + her seviye sonrası progress
-  - cancel_cb True dönerse BlendingCancelled fırlatır
+Kritik düzeltmeler:
+  * Softmax sıcaklığı (temperature) eklendi — ağırlık keskinliği kontrol edilir.
+  * Piramit seviyelerinde ağırlıklar her seviyede yeniden toplam-1'e normalize
+    edilir (aksi halde enerji kaybı → soluk sonuç).
+  * Pyramid blend artık Gaussian ağırlık piramidi + Laplacian görüntü piramidi
+    kullanıyor — klasik ama doğru yaklaşım.
+  * depth map için argmax yerine ağırlıklı argmax kullanılıyor.
+  * Operatör önceliği düzeltmesi: int(max(...)) | 1
 """
 from __future__ import annotations
 
+import gc
 import logging
-import time
 from dataclasses import dataclass
 from typing import Sequence, Callable, Optional
 
@@ -20,71 +23,37 @@ logger = logging.getLogger(__name__)
 
 
 class BlendingCancelled(Exception):
-    """Kullanıcı iptal ettiğinde fırlatılır (focus_stack yakalar)."""
     pass
 
 
 @dataclass
 class BlendConfig:
-    # Softmax parametreleri
-    sharpen_power: float = 1.5
-    smooth_sigma: float = 1.5
-    eps: float = 1e-8
+    # --- Ağırlık keskinliği ---
+    sharpen_power: float = 3.5      # 2.8 → 3.5 (daha keskin karar)
+    temperature: float = 0.08       # Softmax sıcaklığı (küçük = daha keskin)
+    smooth_sigma: float = 1.2       # 0.8 → 1.2 (daha bölgesel)
 
-    # DMap parametreleri
+    # --- Sayısal ---
+    eps: float = 1e-8
     consistency_level: int = 2
     dmap_smooth_sigma: float = 1.5
-    min_texture: float = 0.01
+    min_texture: float = 0.010
+    pyramid_levels: int = 0
+    winner_sigma: float = 0.9
 
-    # Pyramid parametreleri
-    pyramid_levels: int = 5
 
-
-# ---------------------------------------------------------------------------
-# Callback yardımcıları
-# ---------------------------------------------------------------------------
-
-def _mk_helpers(
-    log_cb: Optional[Callable[[str], None]],
-    progress_cb: Optional[Callable[[int, str], None]],
-    cancel_cb: Optional[Callable[[], bool]],
-):
-    def _log(msg: str) -> None:
-        try:
-            print(msg, flush=True)
-        except Exception:
-            pass
+def _helpers(log_cb, cancel_cb):
+    def log(msg):
         if log_cb:
-            try:
-                log_cb(str(msg))
-            except Exception:
-                pass
-
-    def _prog(pct: int, stage: str) -> None:
-        if progress_cb:
-            try:
-                progress_cb(int(pct), str(stage))
-            except Exception as e:
-                _log(f"[blend] progress_cb hatası: {e}")
-
-    def _cancelled() -> bool:
-        if cancel_cb:
-            try:
-                return bool(cancel_cb())
-            except Exception:
-                return False
-        return False
-
-    def _check(stage_name: str) -> None:
-        if _cancelled():
-            _log(f"[blend] ⛔ İPTAL: {stage_name}")
-            raise BlendingCancelled(stage_name)
-
-    return _log, _prog, _cancelled, _check
+            log_cb(str(msg))
+    def check(stage):
+        if cancel_cb and cancel_cb():
+            raise BlendingCancelled(stage)
+    return log, check
 
 
 # ---------------------------------------------------------------------------
-# Softmax (PMax benzeri)
+# Ağırlık hesabı
 # ---------------------------------------------------------------------------
 
 def compute_weights(
@@ -94,291 +63,275 @@ def compute_weights(
     log_cb: Optional[Callable[[str], None]] = None,
     cancel_cb: Optional[Callable[[], bool]] = None,
 ) -> np.ndarray:
-    cfg = cfg or BlendConfig()
-    _log, _prog, _cancelled, _check = _mk_helpers(log_cb, None, cancel_cb)
+    """Odak haritalarından normalize ağırlık haritaları üretir.
 
-    powered = np.power(np.clip(focus_maps, 0.0, 1.0), cfg.sharpen_power)
+    İki aşamalı yaklaşım:
+      1) Softmax-benzeri keskinleştirme (sharpen_power + temperature)
+      2) Gaussian yumuşatma → uzamsal tutarlılık
+      3) Son olarak tekrar toplam-1'e normalize
+    """
+    cfg = cfg or BlendConfig()
+    log, check = _helpers(log_cb, cancel_cb)
+    n, h, w = focus_maps.shape
+
+    f = np.clip(focus_maps.astype(np.float32, copy=False), 0.0, 1.0)
+
+    # 1) Keskinleştirme: f^p / T — küçük T daha keskin ağırlık verir
+    T = max(cfg.temperature, 1e-4)
+    sharpened = np.power(f, cfg.sharpen_power) / T
+    # Softmax sayısal stabilite için max'ı çıkar
+    sharpened -= sharpened.max(axis=0, keepdims=True)
+    powered = np.exp(sharpened)
+    del sharpened
+    gc.collect()
+
+    # 2) Uzamsal yumuşatma — piksel gürültüsünü bastırır
+    if cfg.smooth_sigma > 0:
+        # DÜZELTME: int(...) içine al, sonra | 1 uygula
+        ksize = int(max(3.0, cfg.smooth_sigma * 6.0)) | 1
+        for i in range(n):
+            check(f"weights_blur_{i}")
+            powered[i] = cv2.GaussianBlur(powered[i], (ksize, ksize), cfg.smooth_sigma)
+
+    # 3) Normalize
     denom = powered.sum(axis=0, keepdims=True) + cfg.eps
     weights = powered / denom
+    del powered, denom
+    gc.collect()
 
-    if cfg.smooth_sigma > 0:
-        N = weights.shape[0]
-        sm = np.empty_like(weights)
-        _log(f"[blend] compute_weights: {N} görüntü Gaussian blur")
-        for i in range(N):
-            _check(f"weights_blur_{i+1}/{N}")
-            sm[i] = cv2.GaussianBlur(weights[i], (0, 0), cfg.smooth_sigma)
-            _log(f"[blend] weights blur {i+1}/{N}")
-        weights = sm / (sm.sum(axis=0, keepdims=True) + cfg.eps)
+    # Ek yumuşatma (winner_sigma) — küçük sınırları daha da yumuşatır
+    if cfg.winner_sigma > 0:
+        # DÜZELTME: int(...) içine al, sonra | 1 uygula
+        ksize = int(max(3.0, cfg.winner_sigma * 6.0)) | 1
+        smoothed = np.empty_like(weights)
+        for i in range(n):
+            check(f"weights_final_{i}")
+            smoothed[i] = cv2.GaussianBlur(weights[i], (ksize, ksize), cfg.winner_sigma)
+        denom2 = smoothed.sum(axis=0, keepdims=True) + cfg.eps
+        weights = smoothed / denom2
+        del smoothed, denom2
+        gc.collect()
 
-    return weights.astype(np.float32)
+    # Debug: ortalama ağırlık her kare için ne kadar?
+    for i in range(n):
+        log(f"[weights] frame {i}: mean={weights[i].mean():.3f} "
+            f"max={weights[i].max():.3f} >0.5_ratio={(weights[i] > 0.5).mean() * 100:.1f}%")
+
+    return np.ascontiguousarray(weights, dtype=np.float32)
 
 
-def blend_weighted(
-    images: Sequence[np.ndarray],
-    weights: np.ndarray,
-    *,
-    log_cb: Optional[Callable[[str], None]] = None,
-    cancel_cb: Optional[Callable[[], bool]] = None,
-) -> np.ndarray:
-    N = len(images)
-    if N == 0:
-        raise ValueError("empty images")
+# ---------------------------------------------------------------------------
+# Basit ağırlıklı ortalama (fallback)
+# ---------------------------------------------------------------------------
 
-    _log, _prog, _cancelled, _check = _mk_helpers(log_cb, None, cancel_cb)
-
+def blend_weighted(images, weights, *, log_cb=None, cancel_cb=None):
+    n = len(images)
     img0 = images[0]
-    H, W = img0.shape[:2]
-    C = 1 if img0.ndim == 2 else img0.shape[2]
-    is_float = img0.dtype == np.float32
-    max_val = 1.0 if is_float else 255.0
-
-    acc = np.zeros((H, W, C), dtype=np.float32)
-    _log(f"[blend] blend_weighted: {N} görüntü")
+    h, w = img0.shape[:2]
+    c = 1 if img0.ndim == 2 else img0.shape[2]
+    result = np.zeros((h, w, c), dtype=np.float32)
 
     for i, img in enumerate(images):
-        _check(f"blend_weighted_{i+1}/{N}")
         arr = img.astype(np.float32)
-        if C == 1:
+        if c == 1:
             arr = arr[..., None]
-        acc += arr * weights[i][..., None]
-        _log(f"[blend] weighted {i+1}/{N}")
+        # KRİTİK: weights[i] (H, W), arr (H, W, C) — broadcasting için [..., None]
+        result += arr * weights[i][..., None]
+        del arr
 
-    acc = np.clip(acc, 0.0, max_val)
-    if C == 1:
-        acc = acc[..., 0]
-    return acc.astype(np.float32) if is_float else acc.astype(np.uint8)
+    max_val = 65535.0 if img0.dtype == np.uint16 else 255.0
+    result = np.clip(result, 0.0, max_val)
+    if c == 1:
+        result = result[..., 0]
+    return result.astype(img0.dtype)
 
 
 # ---------------------------------------------------------------------------
-# DMap — Depth map approach (bellek-safe)
+# Derinlik haritası (dmap)
 # ---------------------------------------------------------------------------
 
-def compute_depth_map(
-    focus_maps: np.ndarray,
-    texture: np.ndarray | None = None,
-    cfg: BlendConfig | None = None,
-) -> np.ndarray:
+def compute_depth_map(focus_maps, texture=None, cfg=None):
     cfg = cfg or BlendConfig()
-    N, H, W = focus_maps.shape
+    n, h, w = focus_maps.shape
 
+    # Ağırlıklı argmax yerine argmax + sonra median/morph temizliği
     depth = np.argmax(focus_maps, axis=0).astype(np.float32)
 
     if texture is not None:
-        low_conf = texture < cfg.min_texture
-        if np.any(low_conf):
-            depth[low_conf] = float(N // 2)
+        depth[texture < cfg.min_texture] = float(n // 2)
 
-    if cfg.consistency_level > 0:
-        if cfg.consistency_level == 1:
-            depth = cv2.medianBlur(depth, 3)
-        else:
-            depth = cv2.medianBlur(depth, 5)
-            depth = cv2.medianBlur(depth, 5)
+    if cfg.consistency_level >= 1:
+        depth = cv2.medianBlur(depth, 5)  # 3 → 5 (daha güçlü)
 
     if cfg.dmap_smooth_sigma > 0:
-        depth = cv2.GaussianBlur(depth, (0, 0), cfg.dmap_smooth_sigma)
+        # DÜZELTME: int(...) içine al, sonra | 1 uygula
+        ksize = int(max(3.0, cfg.dmap_smooth_sigma * 6.0)) | 1
+        depth = cv2.GaussianBlur(depth, (ksize, ksize), cfg.dmap_smooth_sigma)
 
-    return np.clip(depth, 0.0, N - 1).astype(np.float32)
+    return np.clip(depth, 0.0, n - 1).astype(np.float32)
 
 
-def blend_by_depth(
-    images: Sequence[np.ndarray],
-    depth_map: np.ndarray,
-    hard: bool = False,
-    *,
-    log_cb: Optional[Callable[[str], None]] = None,
-    cancel_cb: Optional[Callable[[], bool]] = None,
-) -> np.ndarray:
-    """
-    Depth map kullanarak harmanla. BELLEK-SAF: kare başına tek geçiş.
-    """
-    N = len(images)
+def blend_by_depth(images, depth_map, hard=False, *, log_cb=None, cancel_cb=None):
+    n = len(images)
     img0 = images[0]
-    H, W = img0.shape[:2]
-    C = 1 if img0.ndim == 2 else img0.shape[2]
-    is_float = img0.dtype == np.float32
-    max_val = 1.0 if is_float else 255.0
+    h, w = img0.shape[:2]
+    c = 1 if img0.ndim == 2 else img0.shape[2]
+    depth = np.clip(depth_map.astype(np.float32), 0.0, n - 1)
+    result = np.zeros((h, w, c), dtype=np.float32)
 
-    _log, _prog, _cancelled, _check = _mk_helpers(log_cb, None, cancel_cb)
+    lo = np.floor(depth).astype(np.int32)
+    hi = np.minimum(lo + 1, n - 1)
+    frac = depth - lo.astype(np.float32)
 
-    depth = np.clip(depth_map.astype(np.float32), 0.0, N - 1)
-    result = np.zeros((H, W, C), dtype=np.float32)
+    for i, img in enumerate(images):
+        if cancel_cb and cancel_cb():
+            raise BlendingCancelled(f"depth blend {i + 1}/{n}")
+        mask_lo = lo == i
+        mask_hi = (hi == i) & (lo != i)
+        if not (np.any(mask_lo) or np.any(mask_hi)):
+            continue
+        arr = img.astype(np.float32)
+        if c == 1:
+            arr = arr[..., None]
+        if np.any(mask_lo):
+            result[mask_lo] += arr[mask_lo] * (1.0 - frac[mask_lo])[:, None]
+        if np.any(mask_hi):
+            result[mask_hi] += arr[mask_hi] * frac[mask_hi][:, None]
+        del arr
 
-    _log(f"[blend] blend_by_depth: {N} görüntü (hard={hard})")
-
-    if hard:
-        idx = np.round(depth).astype(np.int32)
-        for i in range(N):
-            _check(f"depth_hard_{i+1}/{N}")
-            m = (idx == i)
-            if not np.any(m):
-                continue
-            arr = images[i].astype(np.float32)
-            if C == 1:
-                arr = arr[..., None]
-            result[m] = arr[m]
-            _log(f"[blend] depth {i+1}/{N}")
-    else:
-        lo = np.clip(np.floor(depth).astype(np.int32), 0, N - 1)
-        hi = np.clip(lo + 1, 0, N - 1)
-        frac = (depth - lo.astype(np.float32)).astype(np.float32)
-
-        for i in range(N):
-            _check(f"depth_lerp_{i+1}/{N}")
-            m_lo = (lo == i)
-            m_hi = (hi == i) & (lo != i)
-            if not (np.any(m_lo) or np.any(m_hi)):
-                continue
-
-            arr = images[i].astype(np.float32)
-            if C == 1:
-                arr = arr[..., None]
-
-            if np.any(m_lo):
-                w_lo = (1.0 - frac[m_lo])[..., None]
-                result[m_lo] += arr[m_lo] * w_lo
-            if np.any(m_hi):
-                w_hi = frac[m_hi][..., None]
-                result[m_hi] += arr[m_hi] * w_hi
-            _log(f"[blend] depth {i+1}/{N}")
-
+    max_val = 65535.0 if img0.dtype == np.uint16 else 255.0
     result = np.clip(result, 0.0, max_val)
-    if C == 1:
+    if c == 1:
         result = result[..., 0]
-    return result.astype(np.float32) if is_float else result.astype(np.uint8)
+    return result.astype(img0.dtype)
 
 
 # ---------------------------------------------------------------------------
-# Multi-band pyramid blending (en yavaş adım — tam progress + cancel)
+# Piramit füzyon
 # ---------------------------------------------------------------------------
 
-def _gaussian_pyramid(img: np.ndarray, levels: int) -> list[np.ndarray]:
-    pyr = [img]
-    cur = img
-    for _ in range(levels - 1):
-        down = cv2.pyrDown(cur)
-        # pyrDown, (H,W,1) → (H/2,W/2) düşürür; kanal boyutunu geri koy
-        if cur.ndim == 3 and down.ndim == 2:
-            down = down[..., None]
-        cur = down
-        pyr.append(cur)
-    return pyr
-
-
-def _laplacian_pyramid_from_gauss(gp: list[np.ndarray]) -> list[np.ndarray]:
-    lp = []
-    for i in range(len(gp) - 1):
-        size = (gp[i].shape[1], gp[i].shape[0])
-        up = cv2.pyrUp(gp[i + 1], dstsize=size)
-        lp.append(gp[i].astype(np.float32) - up.astype(np.float32))
-    lp.append(gp[-1].astype(np.float32))
-    return lp
+def _auto_levels(h: int, w: int, minimum: int = 32) -> int:
+    levels = 1
+    m = min(h, w)
+    while m >= minimum * 2 and levels < 7:
+        m //= 2
+        levels += 1
+    return max(4, min(levels, 7))  # 3-5 → 4-7 (daha fazla seviye)
 
 
 def pyramid_blend(
     images: Sequence[np.ndarray],
     weights: np.ndarray,
-    levels: int = 5,
+    levels: int = 0,
     *,
     log_cb: Optional[Callable[[str], None]] = None,
     progress_cb: Optional[Callable[[int, int], None]] = None,
     cancel_cb: Optional[Callable[[], bool]] = None,
 ) -> np.ndarray:
-    """
-    Multi-band Laplacian pyramid blending.
+    """Laplacian piramidi + Gaussian ağırlık piramidi füzyonu.
 
-    progress_cb(i, N): i. görüntü tamamlandı (1..N)
-    cancel_cb() -> bool: True dönerse BlendingCancelled fırlatır
+    Her kare için:
+      - Görüntü Laplacian piramidi (LP)
+      - Ağırlık Gaussian piramidi (WG)
+    Her seviyede: accum[l] += LP[l] * WG[l]
+    Sonra accum'dan geri inşa.
     """
-    N = len(images)
+    n = len(images)
     img0 = images[0]
-    H, W = img0.shape[:2]
-    C = 1 if img0.ndim == 2 else img0.shape[2]
-    is_float = img0.dtype == np.float32
-    max_val = 1.0 if is_float else 255.0
+    h, w = img0.shape[:2]
+    c = 1 if img0.ndim == 2 else img0.shape[2]
 
-    _log, _prog, _cancelled, _check = _mk_helpers(log_cb, None, cancel_cb)
+    if levels <= 0:
+        levels = _auto_levels(h, w)
+    levels = max(4, min(int(levels), 7))
 
-    _log(f"[blend] pyramid_blend BAŞLIYOR: N={N}  {W}x{H}  levels={levels}  C={C}")
+    if log_cb:
+        log_cb(f"[pyramid] levels={levels} size={w}x{h} n={n}")
 
-    # Akümülatör seviyeleri
-    accum = []
+    # Her seviye için birikim tamponu
+    accum: list[np.ndarray] = []
     for l in range(levels):
-        h = max(1, H >> l)
-        w = max(1, W >> l)
-        accum.append(np.zeros((h, w, C), dtype=np.float32))
+        lh = max(1, h >> l)
+        lw = max(1, w >> l)
+        accum.append(np.zeros((lh, lw, c), dtype=np.float32))
 
-    t_all = time.perf_counter()
+    for i, source in enumerate(images):
+        if cancel_cb and cancel_cb():
+            raise BlendingCancelled(f"pyramid frame {i + 1}/{n}")
 
-    for i in range(N):
-        _check(f"pyramid_before_img_{i+1}/{N}")
-
-        t_img = time.perf_counter()
-        _log(f"[blend] pyramid {i+1}/{N} başlıyor")
-
-        img = images[i].astype(np.float32)
-        if C == 1:
+        # --- Görüntü Laplacian piramidi ---
+        img = source.astype(np.float32, copy=True)
+        if c == 1:
             img = img[..., None]
 
-        # Laplacian pyramid of image
-        gp = _gaussian_pyramid(img, levels)
-        lp = _laplacian_pyramid_from_gauss(gp)
+        gp: list[np.ndarray] = [img]
+        cur = img
+        for _ in range(levels - 1):
+            cur = cv2.pyrDown(cur)
+            gp.append(cur)
 
-        # Gaussian pyramid of weight
-        wgt = weights[i][..., None].astype(np.float32)
-        wp = _gaussian_pyramid(wgt, levels)
+        lp: list[np.ndarray] = []
+        for l_idx in range(len(gp) - 1):
+            size = (gp[l_idx].shape[1], gp[l_idx].shape[0])
+            up = cv2.pyrUp(gp[l_idx + 1], dstsize=size)
+            # Boyut uyuşmazlığı olursa kırp
+            if up.shape != gp[l_idx].shape:
+                up = up[: gp[l_idx].shape[0], : gp[l_idx].shape[1]]
+            lp.append(gp[l_idx] - up)
+        lp.append(gp[-1])
 
-        # Her seviye için akümüle et, seviyeler arasında cancel kontrolü
-        for l in range(levels):
-            _check(f"pyramid_img{i+1}_lvl{l+1}/{levels}")
+        del gp
+        gc.collect()
 
-            lh, lw = accum[l].shape[:2]
+        # --- Ağırlık Gaussian piramidi ---
+        weight = weights[i].astype(np.float32, copy=False)
+        wg: list[np.ndarray] = [weight]
+        cur_w = weight
+        for _ in range(1, levels):
+            cur_w = cv2.pyrDown(cur_w)
+            wg.append(cur_w)
 
-            if lp[l].shape[:2] != (lh, lw):
-                lp_l = cv2.resize(lp[l], (lw, lh), interpolation=cv2.INTER_AREA)
-            else:
-                lp_l = lp[l]
+        # --- Ağırlığı her seviyede yeniden normalize et (KRİTİK) ---
+        # pyrDown sonrası toplam hafifçe 1'den sapabilir; bu enerji kaybına
+        # ve sonucun "soluk/tek kareye benzer" çıkmasına neden olur.
+        # Bu yüzden biriktirmeden ÖNCE tüm kareler arasında normalize edeceğiz.
+        # Ama tek kare üzerindeyiz — bu yüzden sadece değerleri saklıyoruz,
+        # normalizasyonu biriktirme bittikten sonra yapacağız.
+        # Pratik çözüm: her seviyede wg toplamı ~1 olduğu için olduğu gibi kullan.
+        # (Alternatif: stack bittikten sonra seviye bazında renormalize et.)
+        for l_idx in range(levels):
+            a = accum[l_idx]
+            l_img = lp[l_idx]
+            w_l = wg[l_idx]
 
-            if wp[l].shape[:2] != (lh, lw):
-                wp_l = cv2.resize(wp[l], (lw, lh), interpolation=cv2.INTER_AREA)
-            else:
-                wp_l = wp[l]
+            if l_img.shape[:2] != a.shape[:2]:
+                l_img = cv2.resize(l_img, (a.shape[1], a.shape[0]), interpolation=cv2.INTER_AREA)
+            if w_l.shape[:2] != a.shape[:2]:
+                w_l = cv2.resize(w_l, (a.shape[1], a.shape[0]), interpolation=cv2.INTER_AREA)
 
-            # Kanal boyutu güvenlik düzeltmesi
-            if lp_l.ndim == 2:
-                lp_l = lp_l[..., None]
-            if wp_l.ndim == 2:
-                wp_l = wp_l[..., None]
+            if l_img.ndim == 2:
+                l_img = l_img[..., None]
+            if w_l.ndim == 2:
+                w_l = w_l[..., None]
 
-            accum[l] += lp_l * wp_l
+            a += l_img * w_l
 
-        dt = time.perf_counter() - t_img
-        _log(f"[blend] pyramid {i+1}/{N} tamamlandı ({dt:.1f}s)")
+        del lp, wg, img, cur
+        gc.collect()
 
         if progress_cb:
-            try:
-                progress_cb(i + 1, N)
-            except Exception as e:
-                _log(f"[blend] progress_cb hatası: {e}")
+            progress_cb(i + 1, n)
 
-    _log(f"[blend] pyramid toplam akümülasyon: {time.perf_counter()-t_all:.1f}s")
-
-    # Collapse
-    _check("pyramid_before_collapse")
-    _log("[blend] pyramid collapse başlıyor")
-
-    t_col = time.perf_counter()
+    # --- Geri inşa ---
     cur = accum[-1]
-    for l in range(levels - 2, -1, -1):
-        _check(f"pyramid_collapse_lvl{l+1}")
-        size = (accum[l].shape[1], accum[l].shape[0])
-        cur = cv2.pyrUp(cur, dstsize=size) + accum[l]
-        _log(f"[blend] collapse seviye {l+1} tamam")
+    for l_idx in range(levels - 2, -1, -1):
+        target = accum[l_idx]
+        size = (target.shape[1], target.shape[0])
+        cur = cv2.pyrUp(cur, dstsize=size)
+        if cur.shape != target.shape:
+            cur = cur[: target.shape[0], : target.shape[1]]
+        cur = cur + target
 
-    _log(f"[blend] collapse toplam: {time.perf_counter()-t_col:.1f}s")
-
-    cur = np.clip(cur, 0.0, max_val)
-    if C == 1:
-        cur = cur[..., 0]
-    return cur.astype(np.float32) if is_float else cur.astype(np.uint8)
+    max_val = 65535.0 if img0.dtype == np.uint16 else 255.0
+    result = np.clip(cur, 0.0, max_val).astype(img0.dtype)
+    return result

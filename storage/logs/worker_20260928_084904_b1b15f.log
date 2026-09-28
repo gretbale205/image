@@ -1,0 +1,19 @@
+[2026-09-28 11:49:04] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_832859.log
+[2026-09-28 11:49:04] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=832859
+[2026-09-28 11:49:04] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-28 11:49:04] [INFO] ══ Job #33 işleniyor ══
+[2026-09-28 11:49:04] [INFO] 9 görüntü işlenecek
+[2026-09-28 11:49:05] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-28 11:49:05] [INFO] ▶ stack_images başlıyor
+[2026-09-28 11:49:05] [INFO] [stack] START N=9 method=pyramid quality=balanced
+[2026-09-28 11:49:36] [INFO] [stack] alignment scores: ['0.959', '0.991', '0.981', '0.992', '1.000', '0.904', '0.985', '0.993', '0.862']
+[2026-09-28 11:49:36] [INFO] [focus_maps] n=9 size=3456x4608 weights(sml=0.35,tng=0.20,var=0.15,ent=0.15,lap=0.15)
+[2026-09-28 11:50:44] [INFO] [focus_maps] global normalization...
+[2026-09-28 11:50:48] [INFO] [stack] focus map ERROR: unsupported operand type(s) for |: 'float' and 'int'
+[2026-09-28 11:50:48] [ERROR] ✗ Job #33 HATA: Exception: Stacking başarısız
+[2026-09-28 11:50:48] [ERROR] Traceback (most recent call last):
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/worker.py", line 266, in process_job
+    raise Exception("Stacking başarısız")
+Exception: Stacking başarısız
+
+[2026-09-28 11:50:48] [INFO] --once modu bitti

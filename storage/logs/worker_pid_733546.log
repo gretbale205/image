@@ -1,0 +1,58 @@
+[2026-09-28 05:09:41] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_733546.log
+[2026-09-28 05:09:41] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=733546
+[2026-09-28 05:09:41] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-28 05:09:41] [INFO] ══ Job #29 işleniyor ══
+[2026-09-28 05:09:41] [INFO] 9 görüntü işlenecek
+[2026-09-28 05:09:41] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-28 05:09:41] [INFO] ▶ stack_images başlıyor
+[2026-09-28 05:09:41] [INFO] [stack] START N=9 method=pyramid quality=balanced bit=8 align=True
+[2026-09-28 05:09:43] [INFO] [stack] load 1.82s shape=(4608, 3456, 3) dtype=uint8
+[2026-09-28 05:09:43] [INFO] [stack] resize -> 3456x4608
+[2026-09-28 05:09:51] [INFO] [stack] preprocess 7.88s
+[2026-09-28 05:09:53] [INFO] [stack] alignment 1.72s ref=4 mean=0.9626 min=0.8608
+[2026-09-28 05:09:53] [INFO] [focus_maps] engine start: N=9 3456x4608
+[2026-09-28 05:09:57] [INFO] [focus_maps] 1/9 done (4.10s)
+[2026-09-28 05:10:02] [INFO] [focus_maps] 2/9 done (5.26s)
+[2026-09-28 05:10:07] [INFO] [focus_maps] 3/9 done (4.42s)
+[2026-09-28 05:10:11] [INFO] [focus_maps] 4/9 done (3.41s)
+[2026-09-28 05:10:14] [INFO] [focus_maps] 5/9 done (3.75s)
+[2026-09-28 05:10:18] [INFO] [focus_maps] 6/9 done (3.50s)
+[2026-09-28 05:10:21] [INFO] [focus_maps] 7/9 done (3.13s)
+[2026-09-28 05:10:25] [INFO] [focus_maps] 8/9 done (3.39s)
+[2026-09-28 05:10:28] [INFO] [focus_maps] 9/9 done (3.34s)
+[2026-09-28 05:10:29] [INFO] [focus_maps] done in 35.62s range=0.0000..1.0000
+[2026-09-28 05:10:29] [INFO] [stack] focus maps 35.71s
+[2026-09-28 05:10:29] [INFO] [stack] ▶ compute_weights
+[2026-09-28 05:10:29] [INFO] [blend] weights START N=9 3456x4608 RAM=1158 MB
+[2026-09-28 05:10:36] [INFO] [blend] weights DONE RAM=1700 MB
+[2026-09-28 05:10:36] [INFO] [stack] ▶ pyramid/weighted blend
+[2026-09-28 05:10:36] [INFO] [blend] PYRAMID START N=9 3456x4608 levels=5 C=3 RAM=1092 MB
+[2026-09-28 05:10:36] [INFO] [blend] accumulators allocated RAM=1092 MB
+[2026-09-28 05:10:36] [INFO] [blend] FRAME 1/9 START RAM=1092 MB
+[2026-09-28 05:10:41] [INFO] [blend] FRAME 1/9 DONE 4.46s RAM=1306 MB
+[2026-09-28 05:10:41] [INFO] [blend] FRAME 2/9 START RAM=1306 MB
+[2026-09-28 05:10:43] [INFO] [blend] FRAME 2/9 DONE 2.36s RAM=1306 MB
+[2026-09-28 05:10:43] [INFO] [blend] FRAME 3/9 START RAM=1306 MB
+[2026-09-28 05:10:46] [INFO] [blend] FRAME 3/9 DONE 2.35s RAM=1306 MB
+[2026-09-28 05:10:46] [INFO] [blend] FRAME 4/9 START RAM=1306 MB
+[2026-09-28 05:10:48] [INFO] [blend] FRAME 4/9 DONE 2.58s RAM=1306 MB
+[2026-09-28 05:10:48] [INFO] [blend] FRAME 5/9 START RAM=1306 MB
+[2026-09-28 05:10:50] [INFO] [blend] FRAME 5/9 DONE 2.10s RAM=1306 MB
+[2026-09-28 05:10:50] [INFO] [blend] FRAME 6/9 START RAM=1306 MB
+[2026-09-28 05:10:53] [INFO] [blend] FRAME 6/9 DONE 2.22s RAM=1306 MB
+[2026-09-28 05:10:53] [INFO] [blend] FRAME 7/9 START RAM=1306 MB
+[2026-09-28 05:10:55] [INFO] [blend] FRAME 7/9 DONE 2.39s RAM=1306 MB
+[2026-09-28 05:10:55] [INFO] [blend] FRAME 8/9 START RAM=1306 MB
+[2026-09-28 05:10:57] [INFO] [blend] FRAME 8/9 DONE 2.15s RAM=1306 MB
+[2026-09-28 05:10:58] [INFO] [blend] FRAME 9/9 START RAM=1306 MB
+[2026-09-28 05:11:00] [INFO] [blend] FRAME 9/9 DONE 2.60s RAM=1306 MB
+[2026-09-28 05:11:00] [INFO] [blend] PYRAMID ACCUMULATION DONE 24.08s RAM=1306 MB
+[2026-09-28 05:11:00] [INFO] [blend] COLLAPSE 4/4 DONE size=432x576 RAM=1306 MB
+[2026-09-28 05:11:00] [INFO] [blend] COLLAPSE 3/4 DONE size=864x1152 RAM=1306 MB
+[2026-09-28 05:11:01] [INFO] [blend] COLLAPSE 2/4 DONE size=1728x2304 RAM=1352 MB
+[2026-09-28 05:11:01] [INFO] [blend] COLLAPSE 1/4 DONE size=3456x4608 RAM=1488 MB
+[2026-09-28 05:11:01] [INFO] [blend] PYRAMID DONE total=25.33s RAM=1306 MB
+[2026-09-28 05:11:04] [INFO] [stack] DONE 82.72s N=9 3456x4608
+[2026-09-28 05:11:04] [INFO] ✔ stack_images tamamlandı (82.8s)
+[2026-09-28 05:11:05] [INFO] ✓ Job #29 tamamlandı
+[2026-09-28 05:11:05] [INFO] --once modu bitti

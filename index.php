@@ -1,13 +1,6 @@
 <?php
 // ============================================================
-// FocusStack — v3.2
-// - Desktop: 2 sütun (kaydırmasız)
-// - Mobile: tek sütun
-// - Method / Bitdepth seçimi
-// - Lightbox + mercek + kamera
-// - ⭐ v3.1: 502 fix — worker asenkron çalışır
-// - ⭐ v3.2: tekil / çoklu / tüm iş iptali + cancelled badge
-//          + retry -> worker otomatik + upload log
+// FocusStack — v3.4
 // ============================================================
 @set_time_limit(600);
 @ini_set('memory_limit', '2G');
@@ -18,7 +11,6 @@ error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 
-// ---------- .ENV ----------
 function load_env(string $path): void {
     if (!is_readable($path)) return;
     foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
@@ -33,7 +25,6 @@ load_env(__DIR__ . '/.env');
 function env(string $k, string $d=''): string { $v = getenv($k); return ($v===false||$v==='') ? $d : $v; }
 function env_int(string $k, int $d): int { $v = getenv($k); return ($v===false||$v==='') ? $d : (int)$v; }
 
-// ---------- AYARLAR ----------
 define('DB_HOST', env('DB_HOST','localhost'));
 define('DB_PORT', env_int('DB_PORT',3306));
 define('DB_NAME', env('DB_NAME','focusstack'));
@@ -43,6 +34,13 @@ define('STORAGE_ROOT', env('STORAGE_ROOT', __DIR__ . '/storage'));
 define('PYTHON_BIN',   __DIR__ . '/worker/venv/bin/python');
 define('LOG_FILE',     STORAGE_ROOT . '/logs/index_worker.log');
 
+if (!defined('TRASH_ROOT'))             define('TRASH_ROOT',             STORAGE_ROOT . '/trash');
+if (!defined('TRASH_PATH'))             define('TRASH_PATH',             TRASH_ROOT);
+if (!defined('TRASH_RETENTION_DAYS'))   define('TRASH_RETENTION_DAYS',   7);
+if (!defined('WORKER_RESTART_GRACE'))   define('WORKER_RESTART_GRACE',   3);
+
+if (!is_dir(TRASH_PATH)) @mkdir(TRASH_PATH, 0755, true);
+
 const MAX_FILE_MB  = 25;
 const MAX_TOTAL_MB = 400;
 const MAX_FILES    = 50;
@@ -50,7 +48,6 @@ const ALLOWED_EXT  = ['jpg','jpeg','png','tif','tiff','bmp','webp'];
 const ALLOWED_METHODS = ['pyramid','softmax','dmap'];
 const ALLOWED_BITDEPTH = [8,16];
 
-// ---------- YARDIMCI ----------
 function db() {
     static $pdo = null;
     if ($pdo === null) {
@@ -65,210 +62,121 @@ function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function flash($m, $t='info') { $_SESSION['flash'][] = ['m'=>$m,'t'=>$t]; }
 function flashes() { $f = $_SESSION['flash'] ?? []; unset($_SESSION['flash']); return $f; }
 
-
-
-
-
-/**
- * jobs.status ENUM'ında 'cancelled' var mı kontrol eder.
- * Yoksa ALTER TABLE ile eklemeyi dener.
- * Başarısızsa false döner (fallback: failed + özel mesaj).
- */
-function ensure_cancelled_status(): bool
-{
+function ensure_cancelled_status(): bool {
     static $ok = null;
     if ($ok !== null) return $ok;
-
     try {
         $pdo = db();
-
-        $row = $pdo->query("SHOW COLUMNS FROM jobs LIKE 'status'")
-                   ->fetch(PDO::FETCH_ASSOC);
-
+        $row = $pdo->query("SHOW COLUMNS FROM jobs LIKE 'status'")->fetch(PDO::FETCH_ASSOC);
         if (!$row) { $ok = false; return false; }
-
         $type = (string)($row['Type'] ?? '');
-
-        if (stripos($type, "'cancelled'") !== false) {
-            $ok = true;
-            return true;
-        }
-
+        if (stripos($type, "'cancelled'") !== false) { $ok = true; return true; }
         if (preg_match('/^enum\((.*)\)$/i', $type, $m)) {
             $newType = "enum(" . $m[1] . ",'cancelled')";
-            $pdo->exec(
-                "ALTER TABLE jobs MODIFY COLUMN status $newType DEFAULT 'queued'"
-            );
-            @file_put_contents(
-                LOG_FILE,
-                '[' . date('Y-m-d H:i:s') . '] ' .
-                "jobs.status ENUM'a 'cancelled' eklendi\n",
-                FILE_APPEND
-            );
-            $ok = true;
-            return true;
+            $pdo->exec("ALTER TABLE jobs MODIFY COLUMN status $newType DEFAULT 'queued'");
+            $ok = true; return true;
         }
-
-        $ok = true;
-        return true;
-
-    } catch (Throwable $e) {
-        @file_put_contents(
-            LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] ' .
-            'ensure_cancelled_status HATA: ' . $e->getMessage() . "\n",
-            FILE_APPEND
-        );
-        $ok = false;
-        return false;
-    }
+        $ok = true; return true;
+    } catch (Throwable $e) { $ok = false; return false; }
 }
 
+function move_to_trash(string $filePath, int $jobId): bool {
+    if (!is_file($filePath)) return false;
+    $trashDir = TRASH_PATH . '/' . $jobId;
+    if (!is_dir($trashDir)) { if (!@mkdir($trashDir, 0755, true)) return false; }
+    $base = basename($filePath);
+    $dest = $trashDir . '/' . date('Ymd_His') . '_' . $base;
+    return @rename($filePath, $dest);
+}
 
+function rrmdir_recursive(string $dir): void {
+    if (!is_dir($dir)) return;
+    foreach (scandir($dir) as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $p = $dir . DIRECTORY_SEPARATOR . $item;
+        is_dir($p) ? rrmdir_recursive($p) : @unlink($p);
+    }
+    @rmdir($dir);
+}
 
-/**
- * ============================================================
- * ASENKRON WORKER BAŞLATICI
- * ============================================================
- *
- * Özellikler:
- *
- * - Python stdout/stderr unbuffered (PYTHONUNBUFFERED + -u)
- * - Worker log dosyası
- * - PID takibi + ölü/stale PID temizleme
- * - Aynı anda birden fazla worker engeli
- * - PHP worker'ın bitmesini beklemez
- * - exec_exit / PID sonucu global loga yazılır
- *
- * ============================================================
- */
-function run_worker(): string
-{
-    /*
-     * --------------------------------------------------------
-     * Python kontrolü
-     * --------------------------------------------------------
-     */
+function get_active_worker_pid(): ?int {
+    $pidFile = STORAGE_ROOT . '/worker.pid';
+    if (!is_file($pidFile)) return null;
+    $pid = (int)trim((string)@file_get_contents($pidFile));
+    if ($pid <= 0) return null;
+    if (!is_dir('/proc/' . $pid)) return null;
+    return $pid;
+}
+
+function kill_worker(int $pid, bool $force = false): array {
+    if ($pid <= 0 || !is_dir('/proc/' . $pid)) {
+        return ['ok' => false, 'error' => 'PID bulunamadı veya zaten durmuş'];
+    }
+    if (!$force) {
+        @posix_kill($pid, SIGTERM);
+        for ($i = 0; $i < WORKER_RESTART_GRACE * 10; $i++) {
+            usleep(100000);
+            if (!is_dir('/proc/' . $pid)) break;
+        }
+    }
+    if (is_dir('/proc/' . $pid)) {
+        @posix_kill($pid, SIGKILL);
+        usleep(300000);
+    }
+    $stillAlive = is_dir('/proc/' . $pid);
+    $pidFile = STORAGE_ROOT . '/worker.pid';
+    if (is_file($pidFile)) {
+        $content = (int)trim((string)@file_get_contents($pidFile));
+        if ($content === $pid) @unlink($pidFile);
+    }
+    @unlink(STORAGE_ROOT . '/logs/worker_pid_' . $pid . '.log');
+    return ['ok' => !$stillAlive, 'pid' => $pid];
+}
+
+function run_worker(): string {
     if (!is_file(PYTHON_BIN)) {
         $msg = "HATA: Python bulunamadı: " . PYTHON_BIN;
-        @file_put_contents(
-            LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n",
-            FILE_APPEND
-        );
+        @file_put_contents(LOG_FILE, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
         return $msg;
     }
-
     if (!is_executable(PYTHON_BIN)) {
         $msg = "HATA: Python executable değil: " . PYTHON_BIN;
-        @file_put_contents(
-            LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n",
-            FILE_APPEND
-        );
+        @file_put_contents(LOG_FILE, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
         return $msg;
     }
-
-    /*
-     * --------------------------------------------------------
-     * Klasörler
-     * --------------------------------------------------------
-     */
     $logDir = STORAGE_ROOT . '/logs';
-    if (!is_dir($logDir)) {
-        @mkdir($logDir, 0755, true);
-    }
+    if (!is_dir($logDir)) @mkdir($logDir, 0755, true);
     if (!is_dir($logDir)) {
         $msg = "HATA: Worker log klasörü oluşturulamadı: " . $logDir;
-        @file_put_contents(
-            LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n",
-            FILE_APPEND
-        );
+        @file_put_contents(LOG_FILE, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
         return $msg;
     }
-
-    /*
-     * --------------------------------------------------------
-     * Worker PID / LOCK
-     * --------------------------------------------------------
-     */
     $pidFile = STORAGE_ROOT . '/worker.pid';
 
     if (is_file($pidFile)) {
         $oldPid = (int)trim((string)@file_get_contents($pidFile));
-
         if ($oldPid > 0 && is_dir('/proc/' . $oldPid)) {
             $msg = "⏳ Worker zaten çalışıyor. PID=" . $oldPid;
             @file_put_contents(LOG_FILE, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
             return $msg;
         }
-
-        // Eski worker ölmüş → takılı 'processing' işleri kurtar
         @unlink($pidFile);
-
         try {
             $stuck = db()->prepare("
-                UPDATE jobs
-                SET status='queued',
-                    stage='uploaded',
-                    progress=0,
+                UPDATE jobs SET status='queued', stage='uploaded', progress=0,
                     error_msg='Worker ölmüş, yeniden kuyruğa alındı'
                 WHERE status='processing'
             ");
             $stuck->execute();
-            $recovered = $stuck->rowCount();
-            if ($recovered > 0) {
-                @file_put_contents(
-                    LOG_FILE,
-                    '[' . date('Y-m-d H:i:s') . "] {$recovered} adet takılı iş kurtarıldı\n",
-                    FILE_APPEND
-                );
-            }
-        } catch (Throwable $e) {
-            @file_put_contents(
-                LOG_FILE,
-                '[' . date('Y-m-d H:i:s') . '] stuck-recovery HATA: ' . $e->getMessage() . "\n",
-                FILE_APPEND
-            );
-        }
+        } catch (Throwable $e) {}
     }
 
-    /*
-     * --------------------------------------------------------
-     * Log dosyası
-     * --------------------------------------------------------
-     */
-    $logFile = $logDir . '/worker_' .
-        date('Ymd_His') . '_' .
-        bin2hex(random_bytes(3)) . '.log';
+    $logFile = $logDir . '/worker_' . date('Ymd_His') . '_' . bin2hex(random_bytes(3)) . '.log';
+    $home = getenv('HOME'); if (!$home) $home = '/home/sularkuyumculuk';
 
-    /*
-     * --------------------------------------------------------
-     * Environment
-     * --------------------------------------------------------
-     */
-    $home = getenv('HOME');
-    if (!$home) {
-        $home = '/home/sularkuyumculuk';
-    }
-
-    /*
-     * --------------------------------------------------------
-     * Python command
-     *
-     * PYTHONUNBUFFERED=1 + -u → print çıktıları log dosyasına
-     * hemen gider (buffer'a takılıp OOM'da kaybolmaz).
-     * --------------------------------------------------------
-     */
     $cmd = sprintf(
-        'cd %s && ' .
-        'HOME=%s ' .
-        'PATH=/usr/local/bin:/usr/bin:/bin ' .
-        'PYTHONUNBUFFERED=1 ' .
-        'nohup %s -u -m worker.worker --once ' .
-        '> %s 2>&1 & ' .
-        'echo $! > %s',
+        'cd %s && HOME=%s PATH=/usr/local/bin:/usr/bin:/bin PYTHONUNBUFFERED=1 ' .
+        'nohup %s -u -m worker.worker --once > %s 2>&1 & echo $! > %s',
         escapeshellarg(__DIR__),
         escapeshellarg($home),
         escapeshellarg(PYTHON_BIN),
@@ -276,20 +184,9 @@ function run_worker(): string
         escapeshellarg($pidFile)
     );
 
-    /*
-     * --------------------------------------------------------
-     * Worker başlat
-     * --------------------------------------------------------
-     */
-    $execOutput = [];
-    $execCode = 0;
+    $execOutput = []; $execCode = 0;
     @exec($cmd, $execOutput, $execCode);
 
-    /*
-     * --------------------------------------------------------
-     * PID oku (kısa gecikmeli retry)
-     * --------------------------------------------------------
-     */
     $pid = '';
     for ($i = 0; $i < 10; $i++) {
         if (is_file($pidFile)) {
@@ -299,159 +196,98 @@ function run_worker(): string
         usleep(100000);
     }
 
-    /*
-     * --------------------------------------------------------
-     * Başlangıç logu (global)
-     * --------------------------------------------------------
-     */
-    $stamp =
-        '[' . date('Y-m-d H:i:s') . '] ' .
-        'Worker arka planda başlatıldı: ' .
-        basename($logFile) .
-        ' PID=' . ($pid !== '' ? $pid : 'unknown') .
-        ' exec_exit=' . $execCode . "\n";
+    @file_put_contents(LOG_FILE,
+        '[' . date('Y-m-d H:i:s') . '] Worker başlatıldı: ' . basename($logFile) .
+        ' PID=' . ($pid !== '' ? $pid : 'unknown') . " exec_exit={$execCode}\n", FILE_APPEND);
 
-    @file_put_contents(LOG_FILE, $stamp, FILE_APPEND);
-
-    /*
-     * Worker logunun başına launcher bilgisi.
-     */
-    @file_put_contents(
-        $logFile,
-        '[launcher] ' . date('Y-m-d H:i:s') . ' Worker başlatıldı' . PHP_EOL .
-        '[launcher] PID=' . ($pid !== '' ? $pid : 'unknown') . PHP_EOL .
-        '[launcher] Python=' . PYTHON_BIN . PHP_EOL .
-        '[launcher] Project=' . __DIR__ . PHP_EOL .
-        '[launcher] exec_exit=' . $execCode . PHP_EOL .
-        '[launcher] command=' . $cmd . PHP_EOL .
-        PHP_EOL,
-        FILE_APPEND
-    );
-
-    /*
-     * Başlangıç kontrolü
-     */
     if ($pid === '' || (int)$pid <= 0) {
-        $msg =
-            "⚠ Worker başlatma sonucu belirsiz.\n" .
-            "PID alınamadı.\n" .
-            "Log: " . basename($logFile);
-
-        @file_put_contents(
-            LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n",
-            FILE_APPEND
-        );
-
-        return $msg;
+        return "⚠ Worker PID alınamadı. Log: " . basename($logFile);
     }
-
-    return
-        "✅ Worker arka planda başlatıldı.\n" .
-        "PID: " . $pid . "\n" .
-        "Log: " . basename($logFile);
+    return "✅ Worker başlatıldı. PID: {$pid}";
 }
 
-/**
- * Tekli / çoklu job iptali.
- * ENUM'da 'cancelled' yoksa otomatik eklemeye çalışır,
- * başarısızsa 'failed' + özel error_msg fallback'i kullanır.
- */
-function cancel_jobs(array $jobIds): string
-{
+function cancel_jobs(array $jobIds): string {
     $jobIds = array_values(array_unique(array_filter(
-        array_map('intval', $jobIds),
-        static function ($id) {
-            return $id > 0;
-        }
+        array_map('intval', $jobIds), static fn($id) => $id > 0
     )));
-
-    if (!$jobIds) {
-        return 'İptal edilecek iş seçilmedi.';
-    }
+    if (!$jobIds) return 'İptal edilecek iş seçilmedi.';
 
     $pdo = db();
     $placeholders = implode(',', array_fill(0, count($jobIds), '?'));
-
     $hasCancelled = ensure_cancelled_status();
 
-    if ($hasCancelled) {
-        $sql = "
-            UPDATE jobs
-            SET
-                status = 'cancelled',
-                error_msg = 'Kullanıcı tarafından durduruldu'
-            WHERE id IN ($placeholders)
-              AND status IN ('queued', 'processing')
-        ";
-    } else {
-        $sql = "
-            UPDATE jobs
-            SET
-                status = 'failed',
-                error_msg = 'Kullanıcı tarafından durduruldu'
-            WHERE id IN ($placeholders)
-              AND status IN ('queued', 'processing')
-        ";
-    }
+    $newStatus = $hasCancelled ? 'cancelled' : 'failed';
+    $sql = "UPDATE jobs SET status = ?, error_msg = 'Kullanıcı tarafından durduruldu'
+            WHERE id IN ($placeholders) AND status IN ('queued', 'processing')";
 
     $stmt = $pdo->prepare($sql);
-    $stmt->execute($jobIds);
-
+    $stmt->execute(array_merge([$newStatus], $jobIds));
     $count = $stmt->rowCount();
 
-    $msg =
-        "🛑 {$count} iş durduruldu." .
-        "\nSeçilen: " . count($jobIds);
+    return "🛑 {$count} iş durduruldu.";
+}
 
-    @file_put_contents(
-        LOG_FILE,
-        '[' . date('Y-m-d H:i:s') . '] cancel_jobs: ' . $msg .
-        ' IDs=' . implode(',', $jobIds) .
-        ' hasCancelled=' . ($hasCancelled ? '1' : '0') . "\n",
-        FILE_APPEND
-    );
-
-    foreach ($jobIds as $jobId) {
-        try {
-            db()->prepare(
-                "INSERT INTO audit_log (job_id, user_ref, action)
-                 VALUES (?, 'web', 'job_cancelled')"
-            )->execute([$jobId]);
-        } catch (Throwable $e) {
-            try {
-                db()->prepare(
-                    "INSERT INTO audit_log (job_id, action)
-                     VALUES (?, 'job_cancelled')"
-                )->execute([$jobId]);
-            } catch (Throwable $ignored) {}
-        }
-    }
-
-    return $msg;
+function cancel_all_jobs(): string {
+    $ids = db()->query("SELECT id FROM jobs WHERE status IN ('queued', 'processing') ORDER BY id")
+        ->fetchAll(PDO::FETCH_COLUMN);
+    if (!$ids) return 'Aktif veya kuyrukta iş yok.';
+    return cancel_jobs(array_map('intval', $ids));
 }
 
 /**
- * ============================================================
- * TÜM AKTİF İŞLERİ İPTAL ET
- * ============================================================
+ * İşi komple sil — dosyaları trash'e, DB'den job + job_files kayıtlarını sil.
  */
-function cancel_all_jobs(): string
-{
+function delete_job(int $jobId): string {
+    if ($jobId <= 0) return 'Geçersiz iş numarası.';
+
     $pdo = db();
 
-    $ids = $pdo->query(
-        "SELECT id
-         FROM jobs
-         WHERE status IN ('queued', 'processing')
-         ORDER BY id"
-    )->fetchAll(PDO::FETCH_COLUMN);
+    // Önce iş var mı?
+    $chk = $pdo->prepare("SELECT id, status FROM jobs WHERE id = ?");
+    $chk->execute([$jobId]);
+    $job = $chk->fetch(PDO::FETCH_ASSOC);
+    if (!$job) return "İş #{$jobId} bulunamadı.";
 
-    if (!$ids) {
-        return 'Aktif veya kuyrukta iş yok.';
+    // İşleniyorsa iptal et
+    if (in_array($job['status'], ['queued','processing'], true)) {
+        cancel_jobs([$jobId]);
     }
 
-    return cancel_jobs(array_map('intval', $ids));
+    // Tüm dosyaları trash'e taşı
+    $files = $pdo->prepare("SELECT id, path FROM job_files WHERE job_id = ?");
+    $files->execute([$jobId]);
+    $rows = $files->fetchAll(PDO::FETCH_ASSOC);
+
+    $moved = 0;
+    foreach ($rows as $r) {
+        if (move_to_trash($r['path'], $jobId)) $moved++;
+    }
+
+    // Ayrıca storage altındaki job klasörünü de trash'e taşı (kalan varsa)
+    foreach (['sources','output','previews'] as $sub) {
+        $dir = STORAGE_ROOT . '/' . $sub . '/' . $jobId;
+        if (is_dir($dir)) {
+            $trashDir = TRASH_PATH . '/' . $jobId . '_' . $sub;
+            if (!is_dir($trashDir)) @mkdir($trashDir, 0755, true);
+            @rename($dir, $trashDir);
+        }
+    }
+
+    // DB kayıtlarını sil
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare("DELETE FROM job_files WHERE job_id = ?")->execute([$jobId]);
+        try {
+            $pdo->prepare("DELETE FROM audit_log WHERE job_id = ?")->execute([$jobId]);
+        } catch (Throwable $t) {}
+        $pdo->prepare("DELETE FROM jobs WHERE id = ?")->execute([$jobId]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return "DB silme hatası: " . $e->getMessage();
+    }
+
+    return "🗑️ İş #{$jobId} silindi ({$moved} dosya geri dönüşüme taşındı).";
 }
 
 // ---------- BADGE ----------
@@ -460,31 +296,20 @@ function badge($st, $errorMsg = '') {
         return 'b-cancelled';
     }
     $cls = [
-        'queued'        => 'b-queued',
-        'processing'    => 'b-proc',
-        'preview_ready' => 'b-ok',
-        'done'          => 'b-ok',
-        'approved'      => 'b-app',
-        'rejected'      => 'b-rej',
-        'failed'        => 'b-fail',
-        'cancelled'     => 'b-cancelled',
+        'queued'=>'b-queued','processing'=>'b-proc','preview_ready'=>'b-ok',
+        'done'=>'b-ok','approved'=>'b-app','rejected'=>'b-rej',
+        'failed'=>'b-fail','cancelled'=>'b-cancelled',
     ];
     return $cls[$st] ?? 'b-queued';
 }
-
 function badge_label($st, $errorMsg = '') {
     if ($st === 'failed' && stripos((string)$errorMsg, 'Kullanıcı tarafından') !== false) {
         return 'Durduruldu';
     }
     return [
-        'queued'        => 'Kuyrukta',
-        'processing'    => 'İşleniyor',
-        'preview_ready' => 'Hazır',
-        'done'          => 'Tamam',
-        'approved'      => 'Onaylandı',
-        'rejected'      => 'Reddedildi',
-        'failed'        => 'Hata',
-        'cancelled'     => 'Durduruldu',
+        'queued'=>'Kuyrukta','processing'=>'İşleniyor','preview_ready'=>'Hazır',
+        'done'=>'Tamam','approved'=>'Onaylandı','rejected'=>'Reddedildi',
+        'failed'=>'Hata','cancelled'=>'Durduruldu',
     ][$st] ?? $st;
 }
 
@@ -495,7 +320,6 @@ function home_url(): string {
 }
 $HOME_URL = home_url();
 
-// ---------- CSRF ----------
 if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(16));
 $CSRF = $_SESSION['csrf'];
 function csrf_check(): bool {
@@ -581,34 +405,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($n === 0) throw new Exception('Dosya yazılamadı');
 
             $pdo->prepare("UPDATE jobs SET file_count=? WHERE id=?")->execute([$n, $jid]);
-            try {
-                $has = $pdo->query("SHOW COLUMNS FROM audit_log LIKE 'user_ref'")->fetch();
-                if ($has) $pdo->prepare("INSERT INTO audit_log (job_id, user_ref, action) VALUES (?, 'web', 'job_created')")->execute([$jid]);
-                else       $pdo->prepare("INSERT INTO audit_log (job_id, action) VALUES (?, 'job_created')")->execute([$jid]);
-            } catch (Throwable $t) {}
             $pdo->commit();
 
-            /*
-             * ----------------------------------------------------
-             * Upload sonrası worker başlat + sonucu logla
-             * ----------------------------------------------------
-             */
             $workerMsg = run_worker();
-            $_SESSION['worker_output'] = $workerMsg;
-
-            @file_put_contents(
-                LOG_FILE,
-                '[' . date('Y-m-d H:i:s') . '] upload->worker: ' .
-                $workerMsg . "\n",
-                FILE_APPEND
-            );
 
             if ($isAjax) {
                 header('Content-Type: application/json');
                 echo json_encode(['ok'=>true, 'job_id'=>$jid, 'files'=>$n]);
                 exit;
             }
-            flash("İş #$jid oluşturuldu ($n dosya).", 'success');
+            flash("İş #$jid oluşturuldu ($n dosya). $workerMsg", 'success');
             header('Location: ?job=' . $jid); exit;
 
         } catch (Throwable $e) {
@@ -623,20 +429,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // ============ MANUEL WORKER ============
-    if ($action === 'run_worker') {
-        $out = run_worker();
-        $_SESSION['worker_output'] = $out;
-
-        @file_put_contents(
-            LOG_FILE,
-            '[' . date('Y-m-d H:i:s') . '] manual->worker: ' .
-            $out . "\n",
-            FILE_APPEND
-        );
-
-        flash('Worker başlatma işlemi tamamlandı', 'info');
-
+    // ============ WORKER BAŞLAT ============
+    if ($action === 'worker_spawn' || $action === 'run_worker') {
+        $msg = run_worker();
+        flash($msg, 'info');
         $back = $_POST['back'] ?? $HOME_URL;
         header('Location: ' . $back); exit;
     }
@@ -644,85 +440,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ============ TEKLİ İPTAL ============
     if ($action === 'cancel_job') {
         $jid = (int)($_POST['job_id'] ?? 0);
-
         try {
-            if ($jid <= 0) {
-                throw new Exception('Geçersiz iş numarası.');
-            }
-
-            $msg = cancel_jobs([$jid]);
-
-            $_SESSION['worker_output'] = $msg;
-            flash($msg, 'info');
-
-        } catch (Throwable $e) {
-            @file_put_contents(
-                LOG_FILE,
-                '[' . date('Y-m-d H:i:s') . '] cancel_job HATA: ' .
-                $e->getMessage() . "\n",
-                FILE_APPEND
-            );
-
-            flash('İş durdurulamadı: ' . $e->getMessage(), 'error');
-        }
-
+            if ($jid <= 0) throw new Exception('Geçersiz iş numarası.');
+            flash(cancel_jobs([$jid]), 'info');
+        } catch (Throwable $e) { flash('Hata: ' . $e->getMessage(), 'error'); }
         $back = $_POST['back'] ?? $HOME_URL;
-        header('Location: ' . $back);
-        exit;
+        header('Location: ' . $back); exit;
     }
 
     // ============ ÇOKLU İPTAL ============
     if ($action === 'cancel_jobs') {
         $jobIds = $_POST['job_ids'] ?? [];
-
-        if (!is_array($jobIds)) {
-            $jobIds = [$jobIds];
-        }
-
-        try {
-            $msg = cancel_jobs($jobIds);
-
-            $_SESSION['worker_output'] = $msg;
-            flash($msg, 'info');
-
-        } catch (Throwable $e) {
-            @file_put_contents(
-                LOG_FILE,
-                '[' . date('Y-m-d H:i:s') . '] cancel_jobs HATA: ' .
-                $e->getMessage() . "\n",
-                FILE_APPEND
-            );
-
-            flash('İşler durdurulamadı: ' . $e->getMessage(), 'error');
-        }
-
+        if (!is_array($jobIds)) $jobIds = [$jobIds];
+        try { flash(cancel_jobs($jobIds), 'info'); }
+        catch (Throwable $e) { flash('Hata: ' . $e->getMessage(), 'error'); }
         $back = $_POST['back'] ?? $HOME_URL;
-        header('Location: ' . $back);
-        exit;
+        header('Location: ' . $back); exit;
     }
 
     // ============ TÜMÜNÜ İPTAL ============
     if ($action === 'cancel_all_jobs') {
-        try {
-            $msg = cancel_all_jobs();
-
-            $_SESSION['worker_output'] = $msg;
-            flash($msg, 'info');
-
-        } catch (Throwable $e) {
-            @file_put_contents(
-                LOG_FILE,
-                '[' . date('Y-m-d H:i:s') . '] cancel_all_jobs HATA: ' .
-                $e->getMessage() . "\n",
-                FILE_APPEND
-            );
-
-            flash('İşler durdurulamadı: ' . $e->getMessage(), 'error');
-        }
-
+        try { flash(cancel_all_jobs(), 'info'); }
+        catch (Throwable $e) { flash('Hata: ' . $e->getMessage(), 'error'); }
         $back = $_POST['back'] ?? $HOME_URL;
-        header('Location: ' . $back);
-        exit;
+        header('Location: ' . $back); exit;
+    }
+
+    // ============ İŞ SİL ============
+    if ($action === 'delete_job') {
+        $jid = (int)($_POST['job_id'] ?? 0);
+        try {
+            $msg = delete_job($jid);
+            flash($msg, 'success');
+        } catch (Throwable $e) {
+            flash('Silme hatası: ' . $e->getMessage(), 'error');
+        }
+        $back = $_POST['back'] ?? $HOME_URL;
+        header('Location: ' . $back); exit;
     }
 
     // ============ ONAY ============
@@ -730,7 +484,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $jid = (int)($_POST['job_id'] ?? 0);
         try {
             db()->prepare("UPDATE jobs SET status='approved', approved_at=NOW() WHERE id=?")->execute([$jid]);
-            try { db()->prepare("INSERT INTO audit_log (job_id, action) VALUES (?, 'approved')")->execute([$jid]); } catch (Throwable $t) {}
             flash("İş #$jid onaylandı", 'success');
         } catch (Throwable $e) { flash('Hata: '.$e->getMessage(), 'error'); }
         header('Location: ?job=' . $jid); exit;
@@ -740,12 +493,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'reject') {
         $jid = (int)($_POST['job_id'] ?? 0);
         try {
-            try {
-                db()->prepare("UPDATE jobs SET status='rejected' WHERE id=?")->execute([$jid]);
-            } catch (Throwable $t) {
-                db()->prepare("UPDATE jobs SET status='failed' WHERE id=?")->execute([$jid]);
-            }
-            try { db()->prepare("INSERT INTO audit_log (job_id, action) VALUES (?, 'rejected')")->execute([$jid]); } catch (Throwable $t) {}
+            try { db()->prepare("UPDATE jobs SET status='rejected' WHERE id=?")->execute([$jid]); }
+            catch (Throwable $t) { db()->prepare("UPDATE jobs SET status='failed' WHERE id=?")->execute([$jid]); }
             flash("İş #$jid reddedildi", 'success');
         } catch (Throwable $e) { flash('Hata: '.$e->getMessage(), 'error'); }
         header('Location: ' . $HOME_URL); exit;
@@ -754,60 +503,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ============ RETRY ============
     if ($action === 'retry') {
         $jid = (int)($_POST['job_id'] ?? 0);
-
         try {
-            if ($jid <= 0) {
-                throw new Exception('Geçersiz iş numarası.');
-            }
+            if ($jid <= 0) throw new Exception('Geçersiz iş numarası.');
+            $check = db()->prepare("SELECT 1 FROM jobs WHERE id = ?");
+            $check->execute([$jid]);
+            if (!$check->fetchColumn()) throw new Exception("İş bulunamadı: #{$jid}");
 
             $stmt = db()->prepare(
-                "UPDATE jobs
-                 SET
-                     status='queued',
-                     stage='uploaded',
-                     progress=0,
-                     error_msg=NULL
-                 WHERE id=?"
+                "UPDATE jobs SET status='queued', stage='uploaded', progress=0, error_msg=NULL WHERE id=?"
             );
-
             $stmt->execute([$jid]);
 
-            if ($stmt->rowCount() === 0) {
-                throw new Exception(
-                    "İş bulunamadı veya yeniden kuyruğa alınamadı: #{$jid}"
-                );
-            }
-
-            /*
-             * Retry sonrası worker otomatik başlasın.
-             */
             $workerMsg = run_worker();
+            flash("İş #{$jid} yeniden kuyruğa alındı. $workerMsg", 'success');
+        } catch (Throwable $e) { flash('Hata: ' . $e->getMessage(), 'error'); }
+        header('Location: ?job=' . $jid); exit;
+    }
 
-            $_SESSION['worker_output'] = $workerMsg;
+    // ============ KAYNAK FOTOĞRAF SİLME ============
+    if ($action === 'delete_source_files') {
+        $jid = (int)($_POST['job_id'] ?? 0);
+        $fileIds = $_POST['file_ids'] ?? [];
+        if (!is_array($fileIds)) $fileIds = [$fileIds];
+        try {
+            if ($jid <= 0) throw new Exception('Geçersiz iş numarası.');
+            $fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), fn($id) => $id > 0)));
+            if (!$fileIds) throw new Exception('Silinecek dosya seçilmedi.');
 
-            @file_put_contents(
-                LOG_FILE,
-                '[' . date('Y-m-d H:i:s') . '] retry->worker: ' .
-                $workerMsg . "\n",
-                FILE_APPEND
-            );
+            $pdo = db();
+            $pdo->beginTransaction();
+            $placeholders = implode(',', array_fill(0, count($fileIds), '?'));
+            $params = array_merge([$jid], $fileIds);
 
-            flash("İş #{$jid} yeniden kuyruğa alındı.", 'success');
+            $stmt = $pdo->prepare("SELECT id, path FROM job_files
+                WHERE job_id = ? AND id IN ($placeholders) AND role = 'source'");
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+            $moved = 0;
+            foreach ($rows as $r) {
+                if (move_to_trash($r['path'], $jid)) {
+                    $pdo->prepare("DELETE FROM job_files WHERE id = ?")->execute([$r['id']]);
+                    $moved++;
+                }
+            }
+            $cntStmt = $pdo->prepare("SELECT COUNT(*) FROM job_files WHERE job_id = ? AND role = 'source'");
+            $cntStmt->execute([$jid]);
+            $count = (int)$cntStmt->fetchColumn();
+            $pdo->prepare("UPDATE jobs SET file_count=? WHERE id=?")->execute([$count, $jid]);
+            $pdo->commit();
+            flash("$moved fotoğraf silindi.", 'success');
         } catch (Throwable $e) {
-            flash('Hata: ' . $e->getMessage(), 'error');
+            if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+            flash('Silme hatası: ' . $e->getMessage(), 'error');
         }
-
-        header('Location: ?job=' . $jid);
-        exit;
+        header('Location: ?job=' . $jid); exit;
     }
 }
 
 // ---------- VERİ ----------
 $flashes = flashes();
-$workerOutput = $_SESSION['worker_output'] ?? null;
-unset($_SESSION['worker_output']);
-
 $selectedId = isset($_GET['job']) ? (int)$_GET['job'] : 0;
 
 $jobs = []; $dbError = null;
@@ -821,7 +576,7 @@ try {
     }
 } catch (Throwable $e) { $dbError = $e->getMessage(); }
 
-$J = null; $files = []; $logs = []; $previewUrl = $masterUrl = null;
+$J = null; $files = []; $previewUrl = $masterUrl = null;
 if ($selectedId) {
     try {
         try {
@@ -834,10 +589,6 @@ if ($selectedId) {
         if ($J) {
             $st = db()->prepare("SELECT * FROM job_files WHERE job_id=? ORDER BY id"); $st->execute([$selectedId]);
             $files = $st->fetchAll(PDO::FETCH_ASSOC);
-            try {
-                $st = db()->prepare("SELECT * FROM audit_log WHERE job_id=? ORDER BY id"); $st->execute([$selectedId]);
-                $logs = $st->fetchAll(PDO::FETCH_ASSOC);
-            } catch (Throwable $t) {}
             foreach ($files as $f) {
                 if ($f['role'] === 'preview') $previewUrl = 'api/get-image.php?job_id='.$selectedId.'&role=preview&t='.time();
                 if ($f['role'] === 'master')  $masterUrl  = 'api/get-image.php?job_id='.$selectedId.'&role=master&t='.time();
@@ -848,11 +599,12 @@ if ($selectedId) {
 
 $lastLog = '';
 if (is_file(LOG_FILE)) $lastLog = (string)@file_get_contents(LOG_FILE);
-if ($lastLog && strlen($lastLog) > 8000) $lastLog = substr($lastLog, -8000);
+if ($lastLog && strlen($lastLog) > 3000) $lastLog = substr($lastLog, -3000);
 
 $autoRefresh = false;
 if ($J && in_array($J['status'], ['queued','processing'], true)) $autoRefresh = true;
 
+$activeWorkerPid = get_active_worker_pid();
 $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 ?>
 <!DOCTYPE html>
@@ -865,104 +617,40 @@ $isSecure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SE
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
-body{
-    background:#09090b;color:#f4f4f5;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    font-size:15px;line-height:1.5;
-    overscroll-behavior-y:none;
-}
+body{background:#09090b;color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.5;overscroll-behavior-y:none}
 a{color:#60a5fa;text-decoration:none}
 a:hover{text-decoration:underline}
-
 @media (min-width:1024px){
     body{height:100vh;overflow:hidden}
-    .app-grid{
-        display:grid;
-        grid-template-columns:400px 1fr;
-        height:100vh;
-        grid-template-rows:auto 1fr;
-    }
+    .app-grid{display:grid;grid-template-columns:400px 1fr;height:100vh;grid-template-rows:auto 1fr}
     .app-header{grid-column:1 / -1}
-    .app-side{
-        border-right:1px solid #1f1f23;
-        overflow-y:auto;
-        padding:20px;
-        background:#0c0c0f;
-    }
-    .app-main{
-        overflow-y:auto;
-        padding:20px 28px;
-        background:#09090b;
-    }
-    .app-side::-webkit-scrollbar,
-    .app-main::-webkit-scrollbar{width:8px}
-    .app-side::-webkit-scrollbar-thumb,
-    .app-main::-webkit-scrollbar-thumb{background:#27272a;border-radius:4px}
+    .app-side{border-right:1px solid #1f1f23;overflow-y:auto;padding:20px;background:#0c0c0f}
+    .app-main{overflow-y:auto;padding:20px 28px;background:#09090b}
+    .app-side::-webkit-scrollbar,.app-main::-webkit-scrollbar{width:8px}
+    .app-side::-webkit-scrollbar-thumb,.app-main::-webkit-scrollbar-thumb{background:#27272a;border-radius:4px}
 }
-
 @media (max-width:1023px){
     .app-grid{display:block}
     .app-side{padding:0}
     .app-main{padding:0 0 40px}
-    .mobile-hide{display:none !important}
 }
-
-.app-header{
-    position:sticky;top:0;z-index:50;
-    background:rgba(9,9,11,.92);
-    backdrop-filter:saturate(180%) blur(14px);
-    -webkit-backdrop-filter:saturate(180%) blur(14px);
-    border-bottom:1px solid #1f1f23;
-    padding:12px 20px;
-    padding-top:max(12px,env(safe-area-inset-top));
-    display:flex;align-items:center;justify-content:space-between;
-    gap:12px;
-}
+.app-header{position:sticky;top:0;z-index:50;background:rgba(9,9,11,.92);backdrop-filter:saturate(180%) blur(14px);-webkit-backdrop-filter:saturate(180%) blur(14px);border-bottom:1px solid #1f1f23;padding:12px 20px;padding-top:max(12px,env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;gap:12px}
 .app-header .brand{font-weight:700;font-size:17px;letter-spacing:-.2px}
 .app-header .brand span{color:#71717a;font-weight:400;font-size:12px;margin-left:6px}
-.app-header .close{
-    background:#18181b;border:1px solid #27272a;color:#e4e4e7;
-    width:38px;height:38px;border-radius:50%;
-    display:inline-flex;align-items:center;justify-content:center;
-    font-size:17px;cursor:pointer;text-decoration:none;flex-shrink:0;
-}
-.app-header .close:active{background:#27272a;transform:scale(.95)}
-
+.app-header .close{background:#18181b;border:1px solid #27272a;color:#e4e4e7;width:38px;height:38px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:17px;cursor:pointer;text-decoration:none;flex-shrink:0}
 .container{max-width:900px;margin:0 auto;padding:16px}
 @media(min-width:1024px){.container{padding:0}}
-
-h2{
-    font-size:11px;color:#a1a1aa;text-transform:uppercase;
-    letter-spacing:.8px;margin:20px 0 10px;font-weight:600;
-}
+h2{font-size:11px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.8px;margin:20px 0 10px;font-weight:600}
 h2:first-child{margin-top:0}
-
-.card{
-    background:#131316;border:1px solid #1f1f23;
-    border-radius:14px;padding:16px;margin-bottom:14px;
-}
+.card{background:#131316;border:1px solid #1f1f23;border-radius:14px;padding:16px;margin-bottom:14px}
 .card.tight{padding:10px}
-
 label{display:block;font-size:12px;color:#a1a1aa;margin-bottom:6px;font-weight:500}
-input[type=text],input[type=file],select{
-    background:#09090b;border:1px solid #27272a;color:#f4f4f5;
-    border-radius:10px;padding:12px 14px;font-size:15px;
-    width:100%;outline:none;font-family:inherit;
-}
+input[type=text],input[type=file],select{background:#09090b;border:1px solid #27272a;color:#f4f4f5;border-radius:10px;padding:12px 14px;font-size:15px;width:100%;outline:none;font-family:inherit}
 input[type=text]:focus,select:focus{border-color:#3b82f6}
 select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%2371717a' d='M6 8L0 0h12z'/></svg>");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
-
 .opts-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
 @media(max-width:520px){.opts-row{grid-template-columns:1fr}}
-
-.btn{
-    display:inline-flex;align-items:center;justify-content:center;gap:8px;
-    min-height:46px;padding:11px 16px;
-    border:0;border-radius:12px;font-size:14px;font-weight:600;
-    cursor:pointer;font-family:inherit;
-    transition:transform .05s ease,background .15s ease;
-    text-decoration:none;
-}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:11px 16px;border:0;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform .05s ease;text-decoration:none}
 .btn:active{transform:scale(.98)}
 .btn.primary{background:#3b82f6;color:#fff}
 .btn.green{background:#16a34a;color:#fff}
@@ -972,89 +660,37 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;u
 .btn.lg{min-height:52px;font-size:15px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.sm{min-height:36px;padding:8px 12px;font-size:12px}
-
-.flash{
-    padding:12px 14px;border-radius:12px;margin-bottom:12px;
-    font-size:14px;border:1px solid transparent;
-    white-space:pre-wrap;
-}
+.flash{padding:12px 14px;border-radius:12px;margin-bottom:12px;font-size:14px;border:1px solid transparent;white-space:pre-wrap}
 .flash.success{background:#052e16;color:#86efac;border-color:#14532d}
 .flash.error{background:#450a0a;color:#fca5a5;border-color:#7f1d1d}
 .flash.info{background:#082f49;color:#7dd3fc;border-color:#0c4a6e}
-
 .upload-row{display:flex;gap:8px;flex-wrap:wrap}
 .upload-row .btn{flex:1;min-width:130px}
-
-.photo-grid{
-    display:grid;grid-template-columns:repeat(4,1fr);
-    gap:6px;margin:12px 0;
-}
+.photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0}
 @media(min-width:520px){.photo-grid{grid-template-columns:repeat(6,1fr)}}
 @media(min-width:1024px){.photo-grid{grid-template-columns:repeat(5,1fr)}}
-.photo-tile{
-    position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;
-    background:#000;border:1px solid #27272a;
-}
+.photo-tile{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#000;border:1px solid #27272a}
 .photo-tile img{width:100%;height:100%;object-fit:cover;display:block}
-.photo-tile .num{
-    position:absolute;top:4px;left:4px;
-    background:rgba(0,0,0,.72);color:#fff;
-    font-size:10px;font-weight:700;padding:2px 5px;border-radius:5px;
-}
-.photo-tile .del{
-    position:absolute;top:4px;right:4px;
-    width:22px;height:22px;border-radius:50%;
-    background:rgba(220,38,38,.92);color:#fff;border:0;
-    font-size:13px;line-height:1;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;
-}
-.photo-empty{
-    text-align:center;color:#52525b;padding:20px 8px;
-    border:1px dashed #27272a;border-radius:12px;margin:10px 0;
-    font-size:12px;
-}
+.photo-tile .num{position:absolute;top:4px;left:4px;background:rgba(0,0,0,.72);color:#fff;font-size:10px;font-weight:700;padding:2px 5px;border-radius:5px}
+.photo-tile .del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:rgba(220,38,38,.92);color:#fff;border:0;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.photo-empty{text-align:center;color:#52525b;padding:20px 8px;border:1px dashed #27272a;border-radius:12px;margin:10px 0;font-size:12px}
 
-.jobrow{
-    display:flex;gap:12px;align-items:center;
-    padding:11px;border:1px solid #1f1f23;border-radius:12px;
-    margin-bottom:8px;background:#18181b;
-    transition:border-color .15s;
-}
-.jobrow:active{background:#1f1f23}
+.jobrow{display:flex;gap:12px;align-items:center;padding:11px;border:1px solid #1f1f23;border-radius:12px;margin-bottom:8px;background:#18181b;transition:border-color .15s}
 .jobrow.active{border-color:#3b82f6;background:#0c1e3a}
-.jobrow > a{
-    display:flex;gap:12px;align-items:center;
-    flex:1;min-width:0;color:inherit;text-decoration:none;
-}
-.job-checkbox{
-    width:20px;height:20px;flex-shrink:0;
-    accent-color:#3b82f6;cursor:pointer;margin:0;
-}
+.jobrow > a{display:flex;gap:12px;align-items:center;flex:1;min-width:0;color:inherit;text-decoration:none}
+.job-checkbox{width:20px;height:20px;flex-shrink:0;accent-color:#3b82f6;cursor:pointer;margin:0}
 .job-spacer{width:20px;flex-shrink:0}
-.jobrow .thumb{
-    width:56px;height:56px;border-radius:10px;overflow:hidden;
-    background:#000;flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;
-    color:#3f3f46;font-size:10px;
-}
+.jobrow .thumb{width:56px;height:56px;border-radius:10px;overflow:hidden;background:#000;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#3f3f46;font-size:10px}
 .jobrow .thumb img{width:100%;height:100%;object-fit:cover}
 .jobrow .meta{flex:1;min-width:0}
-.jobrow .meta .title{
-    font-weight:600;color:#fff;font-size:14px;
-    display:flex;align-items:center;gap:8px;
-    margin-bottom:2px;
-}
-.jobrow .meta .sub{
-    font-size:11px;color:#a1a1aa;
-    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-}
+.jobrow .meta .title{font-weight:600;color:#fff;font-size:14px;display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.jobrow .meta .sub{font-size:11px;color:#a1a1aa;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .jobrow .meta .date{font-size:10px;color:#52525b;margin-top:2px}
 .jobrow .err{font-size:11px;color:#f87171;margin-top:3px}
+.jobrow .delbtn{background:transparent;border:0;color:#71717a;font-size:18px;cursor:pointer;padding:6px;border-radius:8px;flex-shrink:0}
+.jobrow .delbtn:hover{background:#7f1d1d;color:#fca5a5}
 
-.badge{
-    display:inline-block;padding:3px 9px;border-radius:20px;
-    font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
-}
+.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
 .b-queued{background:#78350f;color:#fbbf24}
 .b-proc{background:#0c4a6e;color:#38bdf8}
 .b-ok{background:#14532d;color:#4ade80}
@@ -1063,35 +699,15 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;u
 .b-fail{background:#7f1d1d;color:#fca5a5}
 .b-cancelled{background:#3f3f46;color:#d4d4d8}
 
-.detail-head{
-    background:linear-gradient(180deg,#131316,#0c0c0f);
-    border:1px solid #1f1f23;border-radius:14px;
-    padding:16px;margin-bottom:14px;
-}
+.detail-head{background:linear-gradient(180deg,#131316,#0c0c0f);border:1px solid #1f1f23;border-radius:14px;padding:16px;margin-bottom:14px}
 .detail-head .sku{font-size:22px;font-weight:700;color:#fff;letter-spacing:-.4px;margin:4px 0 8px}
-.detail-head .meta{
-    display:flex;gap:8px;align-items:center;flex-wrap:wrap;
-    font-size:12px;color:#a1a1aa;margin-top:8px;
-}
+.detail-head .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:#a1a1aa;margin-top:8px}
 .progress{height:6px;background:#18181b;border-radius:6px;overflow:hidden;margin-top:12px}
 .progress > div{height:100%;background:#3b82f6;transition:width .4s ease}
 
-.preview-box{
-    background:#000;border:1px solid #1f1f23;border-radius:12px;
-    overflow:hidden;display:flex;align-items:center;justify-content:center;
-    min-height:180px;position:relative;
-}
-.preview-box img{
-    max-width:100%;max-height:65vh;display:block;
-    cursor:zoom-in;
-}
-.preview-box .zoom-badge{
-    position:absolute;bottom:8px;right:8px;
-    background:rgba(0,0,0,.7);color:#fff;font-size:11px;
-    padding:4px 10px;border-radius:20px;
-    backdrop-filter:blur(8px);
-    pointer-events:none;
-}
+.preview-box{background:#000;border:1px solid #1f1f23;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:180px;position:relative}
+.preview-box img{max-width:100%;max-height:65vh;display:block;cursor:zoom-in}
+.preview-box .zoom-badge{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:4px 10px;border-radius:20px;backdrop-filter:blur(8px);pointer-events:none}
 
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .actions .btn{flex:1;min-width:120px}
@@ -1100,186 +716,60 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml;u
 .filelist div{padding:5px 0;border-bottom:1px solid #18181b}
 .filelist div:last-child{border-bottom:0}
 
-pre,textarea{
-    width:100%;background:#000;border:1px solid #27272a;border-radius:10px;
-    padding:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
-    font-size:11px;color:#a1a1aa;white-space:pre-wrap;word-break:break-all;
-    max-height:260px;overflow:auto;margin:0;
-}
+pre,textarea{width:100%;background:#000;border:1px solid #27272a;border-radius:10px;padding:12px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:#a1a1aa;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;margin:0}
 textarea{resize:vertical;min-height:80px}
 
-.pill{
-    display:inline-flex;align-items:center;gap:4px;
-    padding:3px 8px;border-radius:12px;
-    background:#18181b;color:#a1a1aa;
-    font-size:10px;font-weight:600;
-    border:1px solid #27272a;
-}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;background:#18181b;color:#a1a1aa;font-size:10px;font-weight:600;border:1px solid #27272a}
+.pill-active{background:#0c4a6e;color:#7dd3fc;border-color:#0369a1}
 
-/* ==== KAMERA ==== */
-.camera-overlay{
-    position:fixed;inset:0;background:#000;z-index:9999;
-    display:flex;flex-direction:column;
-}
+/* KAMERA */
+.camera-overlay{position:fixed;inset:0;background:#000;z-index:9999;display:flex;flex-direction:column}
 .camera-overlay[hidden]{display:none}
 .camera-view{position:relative;flex:1;overflow:hidden;background:#000}
 .camera-view video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.cam-top{
-    position:absolute;top:0;left:0;right:0;
-    padding:max(14px,env(safe-area-inset-top)) 16px 14px;
-    display:flex;align-items:center;justify-content:space-between;
-    color:#fff;z-index:5;
-    background:linear-gradient(180deg,rgba(0,0,0,.55),transparent);
-    pointer-events:none;
-}
-.cam-top .counter{
-    background:rgba(0,0,0,.55);backdrop-filter:blur(8px);
-    padding:6px 12px;border-radius:20px;
-    font-size:13px;font-weight:600;letter-spacing:.3px;
-}
-.cam-top .close{
-    pointer-events:auto;
-    background:rgba(0,0,0,.55);backdrop-filter:blur(8px);
-    border:0;color:#fff;width:40px;height:40px;border-radius:50%;
-    font-size:20px;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;
-}
-.cam-frame{
-    position:absolute;inset:0;
-    display:flex;align-items:center;justify-content:center;
-    pointer-events:none;z-index:2;
-}
-.cam-frame::before{
-    content:"";
-    width:70%;height:70%;max-width:420px;max-height:420px;
-    border:2px dashed rgba(255,255,255,.55);
-    border-radius:18px;
-    box-shadow:0 0 0 9999px rgba(0,0,0,.18);
-}
-.cam-bottom{
-    padding:16px 16px max(24px,env(safe-area-inset-bottom));
-    background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);
-    z-index:5;
-}
-.cam-thumbs{
-    display:flex;gap:6px;overflow-x:auto;
-    padding-bottom:12px;margin-bottom:8px;
-    scrollbar-width:none;
-}
+.cam-top{position:absolute;top:0;left:0;right:0;padding:max(14px,env(safe-area-inset-top)) 16px 14px;display:flex;align-items:center;justify-content:space-between;color:#fff;z-index:5;background:linear-gradient(180deg,rgba(0,0,0,.55),transparent);pointer-events:none}
+.cam-top .counter{background:rgba(0,0,0,.55);backdrop-filter:blur(8px);padding:6px 12px;border-radius:20px;font-size:13px;font-weight:600}
+.cam-top .close{pointer-events:auto;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);border:0;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cam-frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2}
+.cam-frame::before{content:"";width:70%;height:70%;max-width:420px;max-height:420px;border:2px dashed rgba(255,255,255,.55);border-radius:18px;box-shadow:0 0 0 9999px rgba(0,0,0,.18)}
+.cam-bottom{padding:16px 16px max(24px,env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);z-index:5}
+.cam-thumbs{display:flex;gap:6px;overflow-x:auto;padding-bottom:12px;margin-bottom:8px;scrollbar-width:none}
 .cam-thumbs::-webkit-scrollbar{display:none}
 .cam-thumbs:empty{display:none}
-.cam-thumbs img{
-    width:52px;height:52px;object-fit:cover;border-radius:8px;
-    border:1px solid #333;flex-shrink:0;
-}
-.cam-controls{
-    display:flex;align-items:center;justify-content:space-between;
-    gap:20px;
-}
-.cam-side{
-    width:56px;height:56px;border-radius:50%;
-    background:rgba(255,255,255,.12);color:#fff;border:0;
-    display:flex;align-items:center;justify-content:center;
-    font-size:18px;cursor:pointer;
-    backdrop-filter:blur(8px);
-}
-.cam-side:active{background:rgba(255,255,255,.25)}
-.shutter{
-    width:76px;height:76px;border-radius:50%;
-    border:5px solid #fff;background:#fff;
-    box-shadow:0 0 0 4px rgba(255,255,255,.22);
-    cursor:pointer;transition:transform .07s;
-}
+.cam-thumbs img{width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid #333;flex-shrink:0}
+.cam-controls{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.cam-side{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;border:0;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;backdrop-filter:blur(8px)}
+.shutter{width:76px;height:76px;border-radius:50%;border:5px solid #fff;background:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.22);cursor:pointer;transition:transform .07s}
 .shutter:active{transform:scale(.9)}
-.shutter:disabled{opacity:.4;cursor:not-allowed}
-.cam-hint{
-    position:absolute;bottom:130px;left:50%;transform:translateX(-50%);
-    color:#fff;font-size:13px;background:rgba(0,0,0,.55);
-    padding:6px 14px;border-radius:20px;backdrop-filter:blur(8px);
-    z-index:3;white-space:nowrap;
-}
+.cam-hint{position:absolute;bottom:130px;left:50%;transform:translateX(-50%);color:#fff;font-size:13px;background:rgba(0,0,0,.55);padding:6px 14px;border-radius:20px;backdrop-filter:blur(8px);z-index:3;white-space:nowrap}
 
-/* ==== LIGHTBOX ==== */
-.lightbox{
-    position:fixed;top:0;right:0;bottom:0;left:0;
-    z-index:10000;
-    background:rgba(0,0,0,.97);
-    display:flex;flex-direction:column;
-    touch-action:none;
-    user-select:none;-webkit-user-select:none;
-}
+/* LIGHTBOX */
+.lightbox{position:fixed;top:0;right:0;bottom:0;left:0;z-index:10000;background:rgba(0,0,0,.97);display:flex;flex-direction:column;touch-action:none;user-select:none;-webkit-user-select:none}
 .lightbox[hidden]{display:none}
-.lb-stage{
-    flex:1;position:relative;overflow:hidden;
-    display:flex;align-items:center;justify-content:center;
-    cursor:crosshair;
-}
-.lb-stage img{
-    max-width:100%;max-height:100%;
-    display:block;
-    transform-origin:center center;
-    user-select:none;-webkit-user-drag:none;
-    will-change:transform;
-    pointer-events:none;
-}
-.lb-lens{
-    position:absolute;
-    width:200px;height:200px;
-    border-radius:50%;
-    border:3px solid #fff;
-    box-shadow:0 0 0 3px rgba(0,0,0,.6), 0 8px 30px rgba(0,0,0,.75);
-    background-repeat:no-repeat;
-    background-color:#000;
-    pointer-events:none;
-    z-index:5;
-    transform:translate(-50%,-50%);
-}
+.lb-stage{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:crosshair}
+.lb-stage img{max-width:100%;max-height:100%;display:block;transform-origin:center center;user-select:none;-webkit-user-drag:none;will-change:transform;pointer-events:none}
+.lb-lens{position:absolute;width:200px;height:200px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 3px rgba(0,0,0,.6),0 8px 30px rgba(0,0,0,.75);background-repeat:no-repeat;background-color:#000;pointer-events:none;z-index:5;transform:translate(-50%,-50%)}
 .lb-lens[hidden]{display:none}
-.lb-close{
-    position:absolute;
-    top:max(16px,env(safe-area-inset-top));
-    right:16px;
-    width:44px;height:44px;border-radius:50%;
-    background:rgba(255,255,255,.14);color:#fff;border:0;
-    font-size:22px;cursor:pointer;z-index:20;
-    display:flex;align-items:center;justify-content:center;
-    backdrop-filter:blur(8px);
-}
-.lb-close:active{background:rgba(255,255,255,.3)}
-.lb-toolbar{
-    display:flex;gap:6px;justify-content:center;align-items:center;
-    padding:12px 12px max(16px,env(safe-area-inset-bottom));
-    background:linear-gradient(0deg,rgba(0,0,0,.7),transparent);
-    flex-wrap:wrap;
-    z-index:10;
-}
-.lb-toolbar button, .lb-toolbar a{
-    background:rgba(255,255,255,.14);color:#fff;border:0;
-    min-width:44px;height:44px;padding:0 14px;border-radius:10px;
-    font-size:15px;font-weight:600;cursor:pointer;
-    backdrop-filter:blur(8px);
-    display:inline-flex;align-items:center;justify-content:center;
-    font-family:inherit;text-decoration:none;
-}
-.lb-toolbar button:active, .lb-toolbar a:active{background:rgba(255,255,255,.3)}
-.lb-toolbar #lbZoomVal{
-    color:#fff;font-size:13px;font-weight:600;
-    min-width:56px;text-align:center;
-}
-.lb-hint{
-    position:absolute;bottom:86px;left:50%;transform:translateX(-50%);
-    color:#fff;font-size:12px;background:rgba(0,0,0,.6);
-    padding:6px 14px;border-radius:20px;
-    pointer-events:none;opacity:.9;
-    backdrop-filter:blur(8px);
-    white-space:nowrap;
-    z-index:8;
-}
+.lb-close{position:absolute;top:max(16px,env(safe-area-inset-top));right:16px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;border:0;font-size:22px;cursor:pointer;z-index:20;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
+.lb-toolbar{display:flex;gap:6px;justify-content:center;align-items:center;padding:12px 12px max(16px,env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(0,0,0,.7),transparent);flex-wrap:wrap;z-index:10}
+.lb-toolbar button,.lb-toolbar a{background:rgba(255,255,255,.14);color:#fff;border:0;min-width:44px;height:44px;padding:0 14px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;backdrop-filter:blur(8px);display:inline-flex;align-items:center;justify-content:center;font-family:inherit;text-decoration:none}
+.lb-toolbar #lbZoomVal{color:#fff;font-size:13px;font-weight:600;min-width:56px;text-align:center}
+.lb-hint{position:absolute;bottom:86px;left:50%;transform:translateX(-50%);color:#fff;font-size:12px;background:rgba(0,0,0,.6);padding:6px 14px;border-radius:20px;pointer-events:none;opacity:.9;backdrop-filter:blur(8px);white-space:nowrap;z-index:8}
+
+.source-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px}
+.source-tile{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#000;border:1px solid #27272a;cursor:pointer;display:block}
+.source-tile img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+.source-tile input{position:absolute;top:4px;left:4px;z-index:2;width:18px;height:18px;accent-color:#3b82f6;cursor:pointer;margin:0}
+.source-tile .src-size{position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.72);color:#fff;font-size:9px;padding:1px 5px;border-radius:4px;pointer-events:none}
+.source-tile .src-check{position:absolute;inset:0;background:rgba(59,130,246,.35);display:none;align-items:center;justify-content:center;color:#fff;font-size:28px;font-weight:700;pointer-events:none}
+.source-tile input:checked ~ .src-check{display:flex}
+.source-tile:has(input:checked){border-color:#3b82f6}
+
+.logbox{background:#000;border:1px solid #27272a;border-radius:8px;padding:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:#71717a;white-space:pre-wrap;word-break:break-all;max-height:140px;overflow:auto;line-height:1.4}
 </style>
 </head>
 <body>
 
-<!-- ===================== LIGHTBOX ===================== -->
 <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true">
     <button type="button" class="lb-close" id="lbClose" aria-label="Kapat">✕</button>
     <div class="lb-stage" id="lbStage">
@@ -1297,7 +787,6 @@ textarea{resize:vertical;min-height:80px}
     </div>
 </div>
 
-<!-- ===================== CAMERA ===================== -->
 <div id="cameraOverlay" class="camera-overlay" hidden>
     <div class="camera-view">
         <video id="video" autoplay playsinline muted></video>
@@ -1380,9 +869,7 @@ textarea{resize:vertical;min-height:80px}
                 <input type="file" id="fileInput" accept="image/*" multiple hidden>
 
                 <div style="margin-top:10px">
-                    <button type="button" class="btn green full lg" id="uploadBtn" disabled>
-                        🚀 Stack Oluştur
-                    </button>
+                    <button type="button" class="btn green full lg" id="uploadBtn" disabled>🚀 Stack Oluştur</button>
                 </div>
                 <div style="text-align:center;color:#52525b;font-size:11px;margin-top:8px">
                     Max <?= MAX_FILES ?> dosya · <?= MAX_FILE_MB ?>MB/dosya
@@ -1398,32 +885,48 @@ textarea{resize:vertical;min-height:80px}
 
                 <div class="actions" style="margin-top:0">
 
-                    <?php if (in_array($J['status'], ['queued', 'processing'], true)): ?>
-                        <form method="post"
-                              style="flex:1;min-width:120px"
-                              onsubmit="return confirm('İş #<?= $jid ?> durdurulsun mu?');">
-                            <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
-                            <input type="hidden" name="action" value="cancel_job">
-                            <input type="hidden" name="job_id" value="<?= $jid ?>">
-                            <input type="hidden" name="back" value="?job=<?= $jid ?>">
-                            <button class="btn red full" type="submit">🛑 Durdur</button>
-                        </form>
-                    <?php endif; ?>
+                    <?php
+                    $canCancel = in_array($J['status'], ['queued', 'processing'], true);
+                    $canRetry  = in_array($J['status'], ['cancelled', 'failed', 'rejected'], true);
+                    $canDelete = !in_array($J['status'], ['processing'], true);
+                    ?>
 
-                    <?php if (in_array($J['status'], ['cancelled', 'failed'], true)): ?>
-                        <form method="post" style="flex:1;min-width:120px">
-                            <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
-                            <input type="hidden" name="action" value="retry">
-                            <input type="hidden" name="job_id" value="<?= $jid ?>">
-                            <button class="btn gray full" type="submit">🔄 Yeniden Dene</button>
-                        </form>
-                    <?php endif; ?>
+                    <form method="post" style="flex:1;min-width:120px"
+                          onsubmit="return confirm('İş #<?= $jid ?> durdurulsun mu?');">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="cancel_job">
+                        <input type="hidden" name="job_id" value="<?= $jid ?>">
+                        <input type="hidden" name="back" value="?job=<?= $jid ?>">
+                        <button class="btn red full" type="submit" <?= $canCancel ? '' : 'disabled' ?>>
+                            🛑 Durdur
+                        </button>
+                    </form>
 
                     <form method="post" style="flex:1;min-width:120px">
                         <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
-                        <input type="hidden" name="action" value="run_worker">
+                        <input type="hidden" name="action" value="retry">
+                        <input type="hidden" name="job_id" value="<?= $jid ?>">
+                        <button class="btn gray full" type="submit" <?= $canRetry ? '' : 'disabled' ?>>
+                            🔄 Yeniden Dene
+                        </button>
+                    </form>
+
+                    <form method="post" style="flex:1;min-width:120px">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="worker_spawn">
                         <input type="hidden" name="back" value="?job=<?= $jid ?>">
-                        <button class="btn green full" type="submit">▶ Worker</button>
+                        <button class="btn green full" type="submit">▶ Kuyruğu Çalıştır</button>
+                    </form>
+
+                    <form method="post" style="flex:1;min-width:120px"
+                          onsubmit="return confirm('İş #<?= $jid ?> ve tüm dosyaları silinsin mi?');">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="delete_job">
+                        <input type="hidden" name="job_id" value="<?= $jid ?>">
+                        <input type="hidden" name="back" value="<?= h($HOME_URL) ?>">
+                        <button class="btn red full" type="submit" <?= $canDelete ? '' : 'disabled' ?>>
+                            🗑️ İşi Sil
+                        </button>
                     </form>
 
                 </div>
@@ -1452,26 +955,11 @@ textarea{resize:vertical;min-height:80px}
 
         <?php endif; ?>
 
-        <h2>⚙️ Worker</h2>
-        <div class="card">
-            <form method="post" style="margin:0">
-                <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
-                <input type="hidden" name="action" value="run_worker">
-                <input type="hidden" name="back" value="<?= h($_SERVER['REQUEST_URI']) ?>">
-                <button class="btn green full" type="submit">▶ Kuyruğu Çalıştır</button>
-            </form>
-            <div style="font-size:11px;color:#71717a;margin-top:8px">
-                Worker arka planda çalışır. İlerleme sayfayı yenileyerek takip edilir.
-            </div>
-            <?php if ($workerOutput !== null): ?>
-                <h2 style="margin-top:14px">Bu Çalıştırma</h2>
-                <textarea readonly><?= h($workerOutput) ?></textarea>
-            <?php endif; ?>
-            <?php if ($lastLog): ?>
-                <h2 style="margin-top:14px">Son Worker Log</h2>
-                <textarea readonly><?= h($lastLog) ?></textarea>
-            <?php endif; ?>
-        </div>
+        <?php if ($lastLog): ?>
+            <h2 style="margin-top:16px">📜 Son Log</h2>
+            <div class="logbox"><?= h($lastLog) ?></div>
+        <?php endif; ?>
+
         </div>
     </aside>
 
@@ -1480,55 +968,46 @@ textarea{resize:vertical;min-height:80px}
 
         <?php if (!$J): ?>
 
-            <h2>📋 İşler (<?= count($jobs) ?>)</h2>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;flex-wrap:wrap">
+                <h2 style="margin:0">📋 İşler (<?= count($jobs) ?>)</h2>
+
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <a class="btn gray sm" href="<?= h($HOME_URL) ?>">🔄 Yenile</a>
+
+                    <form method="post" style="margin:0">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="worker_spawn">
+                        <input type="hidden" name="back" value="<?= h($HOME_URL) ?>">
+                        <button class="btn <?= $activeWorkerPid ? 'gray' : 'green' ?> sm" type="submit">
+                            <?= $activeWorkerPid ? '⏳ Çalışıyor (PID '.$activeWorkerPid.')' : '▶ Kuyruğu Çalıştır' ?>
+                        </button>
+                    </form>
+                </div>
+            </div>
 
             <?php if (!empty($jobs)): ?>
-
-                <form method="post"
-                      id="bulkCancelForm"
-                      onsubmit="return prepareBulkCancel();"
+                <form method="post" id="bulkCancelForm" onsubmit="return prepareBulkCancel();"
                       style="margin-bottom:10px">
-
                     <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
                     <input type="hidden" name="action" value="cancel_jobs">
                     <input type="hidden" name="back" value="<?= h($HOME_URL) ?>">
 
-                    <div class="card tight"
-                         style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-
-                        <button type="button" class="btn gray sm" onclick="selectActiveJobs()">
-                            ☑ Aktifleri Seç
-                        </button>
-
-                        <button type="button" class="btn gray sm" onclick="clearJobSelection()">
-                            ☐ Seçimi Temizle
-                        </button>
-
-                        <button type="submit" class="btn red sm">
-                            🛑 Seçilenleri Durdur
-                        </button>
-
-                        <span id="selectedCount" style="font-size:11px;color:#71717a;margin-left:auto">
-                            0 seçili
-                        </span>
+                    <div class="card tight" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:0">
+                        <button type="button" class="btn gray sm" onclick="selectActiveJobs()">☑ Aktifleri Seç</button>
+                        <button type="button" class="btn gray sm" onclick="clearJobSelection()">☐ Seçimi Temizle</button>
+                        <button type="submit" class="btn red sm">🛑 Seçilenleri Durdur</button>
+                        <span id="selectedCount" style="font-size:11px;color:#71717a;margin-left:auto">0 seçili</span>
                     </div>
-
                     <div id="bulkCancelInputs"></div>
                 </form>
 
-                <form method="post"
-                      style="margin-bottom:12px"
+                <form method="post" style="margin-bottom:12px"
                       onsubmit="return confirm('Kuyruktaki ve çalışan TÜM işleri durdurmak istediğinize emin misiniz?');">
-
                     <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
                     <input type="hidden" name="action" value="cancel_all_jobs">
                     <input type="hidden" name="back" value="<?= h($HOME_URL) ?>">
-
-                    <button type="submit" class="btn red sm">
-                        🛑 Tüm Aktif İşleri Durdur
-                    </button>
+                    <button type="submit" class="btn red sm">🛑 Tüm Aktif İşleri Durdur</button>
                 </form>
-
             <?php endif; ?>
 
             <div class="card tight">
@@ -1544,10 +1023,7 @@ textarea{resize:vertical;min-height:80px}
                 <div class="jobrow <?= $selectedId === $jid ? 'active' : '' ?>">
 
                     <?php if ($selectable): ?>
-                        <input type="checkbox"
-                               class="job-checkbox"
-                               value="<?= $jid ?>"
-                               onclick="updateSelectedCount();">
+                        <input type="checkbox" class="job-checkbox" value="<?= $jid ?>" onclick="updateSelectedCount();">
                     <?php else: ?>
                         <span class="job-spacer"></span>
                     <?php endif; ?>
@@ -1566,6 +1042,9 @@ textarea{resize:vertical;min-height:80px}
                                 <span><?= (int)$j['file_count'] ?> dosya</span>
                                 <?php if ($jm): ?><span class="pill"><?= h($jm) ?></span><?php endif; ?>
                                 <?php if ($jb): ?><span class="pill"><?= (int)$jb ?>-bit</span><?php endif; ?>
+                                <?php if ($activeWorkerPid && $j['status'] === 'processing'): ?>
+                                    <span class="pill pill-active">⚙️ PID <?= $activeWorkerPid ?></span>
+                                <?php endif; ?>
                             </div>
                             <?php if (!empty($j['error_msg'])): ?>
                                 <div class="err">⚠ <?= h(mb_substr($j['error_msg'], 0, 70)) ?></div>
@@ -1573,6 +1052,15 @@ textarea{resize:vertical;min-height:80px}
                             <div class="date"><?= h($j['created_at']) ?></div>
                         </div>
                     </a>
+
+                    <form method="post" style="margin:0"
+                          onsubmit="return confirm('İş #<?= $jid ?> silinsin mi? (dosyalar 7 gün geri dönüşümde kalır)');">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="delete_job">
+                        <input type="hidden" name="job_id" value="<?= $jid ?>">
+                        <input type="hidden" name="back" value="<?= h($HOME_URL) ?>">
+                        <button type="submit" class="delbtn" title="İşi sil">🗑️</button>
+                    </form>
                 </div>
             <?php endforeach; endif; ?>
             </div>
@@ -1595,6 +1083,9 @@ textarea{resize:vertical;min-height:80px}
                 <span style="color:#a1a1aa;margin-left:8px;font-size:12px"><?= h($J['stage']) ?> · %<?= (int)$J['progress'] ?></span>
                 <?php if ($jm): ?><span class="pill" style="margin-left:6px"><?= h($jm) ?></span><?php endif; ?>
                 <?php if ($jb): ?><span class="pill" style="margin-left:4px"><?= (int)$jb ?>-bit</span><?php endif; ?>
+                <?php if ($activeWorkerPid && $J['status'] === 'processing'): ?>
+                    <span class="pill pill-active" style="margin-left:4px">⚙️ PID <?= $activeWorkerPid ?></span>
+                <?php endif; ?>
 
                 <div class="progress"><div style="width:<?= (int)$J['progress'] ?>%"></div></div>
 
@@ -1614,8 +1105,7 @@ textarea{resize:vertical;min-height:80px}
                 <?php if ($previewUrl): ?>
                     <?php $lbSrc = $masterUrl ?: $previewUrl; ?>
                     <div class="preview-box">
-                        <img src="<?= h($previewUrl) ?>"
-                             alt="Sonuç"
+                        <img src="<?= h($previewUrl) ?>" alt="Sonuç"
                              data-lightbox="<?= h($lbSrc) ?>"
                              data-lightbox-full="<?= h($lbSrc) ?>"
                              data-download="<?= h($lbSrc) ?>">
@@ -1633,34 +1123,50 @@ textarea{resize:vertical;min-height:80px}
                 <?php endif; ?>
             </div>
 
-            <h2>📁 Kaynak (<?= count($sources) ?>)</h2>
+            <h2>📁 Kaynak Fotoğraflar (<?= count($sources) ?>)</h2>
             <div class="card">
-                <div class="filelist">
-                    <?php foreach ($sources as $f): ?>
-                        <div><?= h(basename($f['path'])) ?> · <?= number_format((int)$f['size']/1024, 0) ?> KB</div>
-                    <?php endforeach; ?>
-                    <?php if (!$sources): ?><div style="color:#71717a">Yok</div><?php endif; ?>
-                </div>
+                <?php if ($sources): ?>
+                    <form method="post" id="deleteSourceForm" onsubmit="return prepareSourceDelete();">
+                        <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+                        <input type="hidden" name="action" value="delete_source_files">
+                        <input type="hidden" name="job_id" value="<?= $jid ?>">
+                        <div id="deleteSourceInputs"></div>
+
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                            <button type="button" class="btn gray sm" onclick="selectAllSources()">☑ Tümünü Seç</button>
+                            <button type="button" class="btn gray sm" onclick="clearSourceSelection()">☐ Temizle</button>
+                            <button type="submit" class="btn red sm">🗑️ Seçilenleri Sil</button>
+                            <span id="sourceSelCount" style="font-size:11px;color:#71717a;margin-left:auto;align-self:center">0 seçili</span>
+                        </div>
+
+                        <div class="source-grid">
+                            <?php foreach ($sources as $f):
+                                $fid = (int)$f['id'];
+                            ?>
+                                <label class="source-tile" for="src_<?= $fid ?>">
+                                    <input type="checkbox" id="src_<?= $fid ?>" class="src-checkbox" value="<?= $fid ?>" onchange="updateSourceCount()">
+                                    <img src="api/get-image.php?job_id=<?= $jid ?>&role=source&file_id=<?= $fid ?>&t=<?= time() ?>"
+                                         alt="" loading="lazy"
+                                         data-lightbox="api/get-image.php?job_id=<?= $jid ?>&role=source&file_id=<?= $fid ?>"
+                                         data-lightbox-full="api/get-image.php?job_id=<?= $jid ?>&role=source&file_id=<?= $fid ?>"
+                                         data-download="api/get-image.php?job_id=<?= $jid ?>&role=source&file_id=<?= $fid ?>">
+                                    <span class="src-size"><?= number_format((int)$f['size']/1024, 0) ?>KB</span>
+                                    <span class="src-check">✓</span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </form>
+                <?php else: ?>
+                    <p style="color:#71717a;margin:0">Kaynak fotoğraf yok.</p>
+                <?php endif; ?>
+
                 <?php if ($masters || $prevs): ?>
-                    <h2 style="margin-top:12px">📤 Çıktılar</h2>
+                    <h2 style="margin-top:16px">📤 Çıktılar</h2>
                     <div class="filelist">
                         <?php foreach (array_merge($masters, $prevs) as $f): ?>
                             <div><?= h($f['role']) ?> → <?= h(basename($f['path'])) ?> · <?= number_format((int)$f['size']/1024, 0) ?> KB</div>
                         <?php endforeach; ?>
                     </div>
-                <?php endif; ?>
-            </div>
-
-            <h2>📜 Log (<?= count($logs) ?>)</h2>
-            <div class="card">
-                <?php if ($logs): ?>
-                    <textarea readonly><?php foreach ($logs as $l):
-                        $line = '[' . ($l['created_at'] ?? '?') . '] ' . ($l['action'] ?? '?');
-                        if (!empty($l['user_ref'])) $line .= ' — user=' . $l['user_ref'];
-                        echo h($line) . "\n";
-                    endforeach; ?></textarea>
-                <?php else: ?>
-                    <p style="color:#71717a;margin:0">Kayıt yok.</p>
                 <?php endif; ?>
             </div>
 
@@ -1671,9 +1177,7 @@ textarea{resize:vertical;min-height:80px}
 </div>
 
 <script>
-// ============================================================
 // KAMERA + UPLOAD
-// ============================================================
 (function(){
     'use strict';
     const CSRF       = <?= json_encode($CSRF) ?>;
@@ -1689,7 +1193,6 @@ textarea{resize:vertical;min-height:80px}
     const camThumbs     = document.getElementById('camThumbs');
     const camLastDel    = document.getElementById('camLastDel');
     const camHint       = document.getElementById('camHint');
-
     const openCameraBtn = document.getElementById('openCamera');
     const pickGalleryBtn= document.getElementById('pickGallery');
     const fileInput     = document.getElementById('fileInput');
@@ -1718,7 +1221,7 @@ textarea{resize:vertical;min-height:80px}
             else if (err.name === 'NotFoundError') msg = 'Kamera bulunamadı.';
             else if (err.name === 'NotReadableError') msg = 'Kamera meşgul.';
             else if (location.protocol !== 'https:' && location.hostname !== 'localhost')
-                msg = 'Kamera için HTTPS gerekir. Şu an: ' + location.protocol;
+                msg = 'Kamera için HTTPS gerekir.';
             else msg += ' ' + err.message;
             alert(msg);
             closeCamera();
@@ -1861,9 +1364,7 @@ textarea{resize:vertical;min-height:80px}
     if (photoGrid) renderMainGrid();
 })();
 
-// ============================================================
 // LIGHTBOX
-// ============================================================
 (function(){
     'use strict';
     const lightbox = document.getElementById('lightbox');
@@ -2066,62 +1567,35 @@ textarea{resize:vertical;min-height:80px}
     });
     stage.addEventListener('touchcancel', ()=>{ tPan = false; tStartDist = 0; });
     stage.addEventListener('dblclick', (e)=>{ e.preventDefault(); resetView(); });
-
-    window.addEventListener('beforeunload', ()=>{
-        lightbox.hidden = true;
-        document.body.style.overflow = '';
-    });
 })();
 
-// ============================================================
 // İŞ SEÇİMİ / ÇOKLU DURDURMA
-// ============================================================
 (function(){
     'use strict';
-
-    function getCheckboxes() {
-        return Array.from(document.querySelectorAll('.job-checkbox'));
-    }
-
+    function getCheckboxes() { return Array.from(document.querySelectorAll('.job-checkbox')); }
     function getSelectedJobs() {
-        return getCheckboxes()
-            .filter(function(el) { return el.checked; })
-            .map(function(el) { return el.value; });
+        return getCheckboxes().filter(el => el.checked).map(el => el.value);
     }
-
     window.updateSelectedCount = function() {
         const count = getSelectedJobs().length;
         const el = document.getElementById('selectedCount');
         if (el) el.textContent = count + ' seçili';
     };
-
     window.selectActiveJobs = function() {
-        getCheckboxes().forEach(function(el) { el.checked = true; });
+        getCheckboxes().forEach(el => el.checked = true);
         updateSelectedCount();
     };
-
     window.clearJobSelection = function() {
-        getCheckboxes().forEach(function(el) { el.checked = false; });
+        getCheckboxes().forEach(el => el.checked = false);
         updateSelectedCount();
     };
-
     window.prepareBulkCancel = function() {
         const ids = getSelectedJobs();
-
-        if (!ids.length) {
-            alert('Önce durdurulacak en az bir iş seçin.');
-            return false;
-        }
-
-        if (!confirm(ids.length + ' iş durdurulacak. Devam etmek istiyor musunuz?')) {
-            return false;
-        }
-
+        if (!ids.length) { alert('Önce durdurulacak en az bir iş seçin.'); return false; }
+        if (!confirm(ids.length + ' iş durdurulacak. Devam etmek istiyor musunuz?')) return false;
         const container = document.getElementById('bulkCancelInputs');
         if (!container) return false;
-
         container.innerHTML = '';
-
         ids.forEach(function(id) {
             const input = document.createElement('input');
             input.type = 'hidden';
@@ -2129,16 +1603,12 @@ textarea{resize:vertical;min-height:80px}
             input.value = id;
             container.appendChild(input);
         });
-
         return true;
     };
-
     updateSelectedCount();
 })();
 
-// ============================================================
 // OTOMATİK YENİLEME
-// ============================================================
 <?php if ($autoRefresh): ?>
 (function(){
     let count = 0;
@@ -2146,21 +1616,53 @@ textarea{resize:vertical;min-height:80px}
         if (document.hidden) return;
         count++;
         if (count > 120) { clearInterval(t); return; }
-
         fetch('api/jobs-status.php?job_id=' + <?= (int)($J['id'] ?? 0) ?>)
             .then(r => r.json())
             .then(d => {
-                if (
-                    d.status &&
-                    ['queued', 'processing'].indexOf(d.status) === -1
-                ) {
+                if (d.status && ['queued', 'processing'].indexOf(d.status) === -1) {
                     location.reload();
                 }
             });
-
     }, 5000);
 })();
 <?php endif; ?>
+
+// KAYNAK FOTO SİLME
+(function(){
+    'use strict';
+    function getSourceChecks() {
+        return Array.from(document.querySelectorAll('.src-checkbox'));
+    }
+    window.updateSourceCount = function() {
+        const n = getSourceChecks().filter(el => el.checked).length;
+        const el = document.getElementById('sourceSelCount');
+        if (el) el.textContent = n + ' seçili';
+    };
+    window.selectAllSources = function() {
+        getSourceChecks().forEach(el => el.checked = true);
+        updateSourceCount();
+    };
+    window.clearSourceSelection = function() {
+        getSourceChecks().forEach(el => el.checked = false);
+        updateSourceCount();
+    };
+    window.prepareSourceDelete = function() {
+        const ids = getSourceChecks().filter(el => el.checked).map(el => el.value);
+        if (!ids.length) { alert('Silinecek en az bir fotoğraf seçin.'); return false; }
+        if (!confirm(ids.length + ' fotoğraf silinecek (7 gün geri dönüşüm). Onaylıyor musunuz?')) return false;
+        const container = document.getElementById('deleteSourceInputs');
+        container.innerHTML = '';
+        ids.forEach(id => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'file_ids[]';
+            inp.value = id;
+            container.appendChild(inp);
+        });
+        return true;
+    };
+    updateSourceCount();
+})();
 </script>
 </body>
 </html>

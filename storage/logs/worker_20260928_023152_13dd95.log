@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 189, in _run_module_as_main
+  File "<frozen runpy>", line 112, in _get_module_details
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/__init__.py", line 24, in <module>
+    from .focus_stack import stack_images
+  File "/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/worker/focus_stack.py", line 159
+    cfg = BlendConfig(
+TabError: inconsistent use of tabs and spaces in indentation
+.sularkuyumculuk.com/pro/image/worker/venv/bin/python' -u -m worker.worker --once > '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/storage/logs/worker_20260928_023152_13dd95.log' 2>&1 & echo $! > '/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image/storage/worker.pid'
+

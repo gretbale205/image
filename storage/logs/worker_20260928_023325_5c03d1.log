@@ -1,0 +1,11 @@
+[2026-09-28 05:33:25] [INFO] [log] Bu worker'ın PID log dosyası: storage/logs/worker_pid_736145.log
+[2026-09-28 05:33:25] [INFO] [log] cwd=/home/sularkuyumculuk/htdocs/www.sularkuyumculuk.com/pro/image  pid=736145
+[2026-09-28 05:33:25] [INFO] --once modu: kuyruk boşaltılıyor
+[2026-09-28 05:33:25] [INFO] ══ Job #24 işleniyor ══
+[2026-09-28 05:33:25] [INFO] 9 görüntü işlenecek
+[2026-09-28 05:33:25] [INFO] method=pyramid (Pyramid (En Kaliteli))  bitdepth=8
+[2026-09-28 05:33:25] [INFO] ▶ stack_images başlıyor
+[2026-09-28 05:33:25] [INFO] [stack] START N=9 method=pyramid quality=balanced
+[2026-09-28 05:33:36] [INFO] [stack] focus map ERROR: cancelled at 1/9
+[2026-09-28 05:33:36] [WARN] ✗ Job #24 İPTAL: Job #24 stacking sırasında iptal edildi
+[2026-09-28 05:33:36] [INFO] --once modu bitti
